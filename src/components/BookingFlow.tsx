@@ -61,14 +61,13 @@ const BookingFlow = () => {
 
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-    const { error } = await supabase.from("appointments").insert({
-      barber_id: selectedBarber.id,
-      client_name: clientName.trim(),
-      client_phone: clientPhone.trim(),
-      appointment_date: dateStr,
-      appointment_time: selectedTime,
-      status: "PENDENTE",
-    });
+const { error } = await supabase.from("appointments").insert({
+  barber_id: selectedBarber.id,
+  client_name: clientName.trim(),
+  client_phone: clientPhone.trim(),
+  appointment_date: dateStr,
+  appointment_time: selectedTime,
+});
 
     if (error) {
       toast.error("Erro ao criar o agendamento");
