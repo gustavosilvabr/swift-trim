@@ -18,14 +18,14 @@ const ReviewsAndMap = () => {
       {/* Google Maps */}
       <div className="glass-card rounded-xl overflow-hidden">
         <iframe
-          src="https://www.google.com/maps/place/Goldblad/@-15.7414728,-48.2681897,17z/data=!3m1!4b1!4m6!3m5!1s0x935bb900538931ff:0x90bf1902faa7c545!8m2!3d-15.741478!4d-48.2635763!16s%2Fg%2F11yxbzj5bn?entry=ttu&g_ep=EgoyMDI2MDIwNC4wIKXMDSoASAFQAw%3D%3D"
-          width="100%"
-          height="250"
-          style={{ border: 0 }}
-          allowFullScreen
-          loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-          title="Localização Goldblad"
+     src="https://www.google.com/maps?q=-15.741478,-48.2635763&z=17&output=embed"
+  width="100%"
+  height="250"
+  style={{ border: 0 }}
+  allowFullScreen
+  loading="lazy"
+  referrerPolicy="no-referrer-when-downgrade"
+  title="Localização da Barbearia"
         />
         <div className="p-4">
           <a
