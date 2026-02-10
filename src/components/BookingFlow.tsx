@@ -8,6 +8,8 @@ import BookingCalendar from "@/components/BookingCalendar";
 import TimeSlotsGrid from "@/components/TimeSlotsGrid";
 import { toast } from "sonner";
 
+const stepTitles = ["Escolha o Barbeiro", "Escolha a Data", "Escolha o Horário", "Seus Dados"];
+
 const BookingFlow = () => {
   const { barbers, loading } = useBarbers();
   const { appointments } = useAppointments();
@@ -50,7 +52,6 @@ const BookingFlow = () => {
 
     toast.success("Agendamento criado com sucesso!");
 
-    // Open WhatsApp
     const displayDate = format(selectedDate, "dd/MM/yyyy", { locale: ptBR });
     const displayTime = selectedTime.substring(0, 5);
     const msg = encodeURIComponent(
@@ -59,7 +60,6 @@ const BookingFlow = () => {
     const waUrl = `https://wa.me/${selectedBarber.phone}?text=${msg}`;
     window.open(waUrl, "_blank");
 
-    // Reset
     setSelectedBarber(null);
     setSelectedDate(null);
     setSelectedTime(null);
@@ -90,15 +90,14 @@ const BookingFlow = () => {
         ))}
       </div>
 
-      {/* Step 1: Barber selection */}
-      <div>
-        <h2 className="font-display text-xl font-bold text-foreground mb-4 text-center">
-          {step === 1 ? "Escolha o Barbeiro" : step === 2 ? "Escolha a Data" : step === 3 ? "Escolha o Horário" : "Seus Dados"}
-        </h2>
-      </div>
+      {/* Step title */}
+      <h2 className="font-display text-xl font-bold text-foreground text-center">
+        {stepTitles[step - 1]}
+      </h2>
 
-      {step >= 1 && (
-        <div className={step > 1 ? "opacity-60 pointer-events-none" : ""}>
+      {/* Only render the active step */}
+      <div className="animate-fade-in" key={step}>
+        {step === 1 && (
           <div className="grid grid-cols-2 gap-4">
             {barbers.map((b) => (
               <BarberCard
@@ -113,11 +112,9 @@ const BookingFlow = () => {
               />
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {step >= 2 && selectedBarber && (
-        <div className={step > 2 ? "opacity-60 pointer-events-none" : ""}>
+        {step === 2 && selectedBarber && (
           <BookingCalendar
             selectedDate={selectedDate}
             onSelectDate={(d) => {
@@ -126,11 +123,9 @@ const BookingFlow = () => {
             }}
             blockedSlots={blockedSlots}
           />
-        </div>
-      )}
+        )}
 
-      {step >= 3 && selectedDate && selectedBarber && (
-        <div className={step > 3 ? "opacity-60 pointer-events-none" : ""}>
+        {step === 3 && selectedDate && selectedBarber && (
           <TimeSlotsGrid
             slots={timeSlots}
             blockedSlots={blockedSlots}
@@ -139,49 +134,49 @@ const BookingFlow = () => {
             selectedTime={selectedTime}
             onSelectTime={setSelectedTime}
           />
-        </div>
-      )}
+        )}
 
-      {step === 4 && (
-        <div className="space-y-4 animate-fade-in">
-          <input
-            type="text"
-            placeholder="Seu nome"
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground border border-border focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-          />
-          <input
-            type="tel"
-            placeholder="WhatsApp (ex: 61 99999-9999)"
-            value={clientPhone}
-            onChange={(e) => setClientPhone(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground border border-border focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
-          />
+        {step === 4 && (
+          <div className="space-y-4">
+            <input
+              type="text"
+              placeholder="Seu nome"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground border border-border focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+            />
+            <input
+              type="tel"
+              placeholder="WhatsApp (ex: 61 99999-9999)"
+              value={clientPhone}
+              onChange={(e) => setClientPhone(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground border border-border focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+            />
 
-          {/* Summary */}
-          <div className="glass-card rounded-xl p-4 text-sm space-y-1">
-            <p className="text-muted-foreground">
-              <span className="text-foreground font-medium">Barbeiro:</span> {selectedBarber?.name}
-            </p>
-            <p className="text-muted-foreground">
-              <span className="text-foreground font-medium">Data:</span>{" "}
-              {selectedDate && format(selectedDate, "dd/MM/yyyy", { locale: ptBR })}
-            </p>
-            <p className="text-muted-foreground">
-              <span className="text-foreground font-medium">Horário:</span> {selectedTime?.substring(0, 5)}
-            </p>
+            {/* Summary */}
+            <div className="glass-card rounded-xl p-4 text-sm space-y-1">
+              <p className="text-muted-foreground">
+                <span className="text-foreground font-medium">Barbeiro:</span> {selectedBarber?.name}
+              </p>
+              <p className="text-muted-foreground">
+                <span className="text-foreground font-medium">Data:</span>{" "}
+                {selectedDate && format(selectedDate, "dd/MM/yyyy", { locale: ptBR })}
+              </p>
+              <p className="text-muted-foreground">
+                <span className="text-foreground font-medium">Horário:</span> {selectedTime?.substring(0, 5)}
+              </p>
+            </div>
+
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !clientName.trim() || !clientPhone.trim()}
+              className="w-full py-4 rounded-xl bg-primary text-primary-foreground font-bold text-lg transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed glow-gold"
+            >
+              {submitting ? "Agendando..." : "Confirmar Agendamento"}
+            </button>
           </div>
-
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !clientName.trim() || !clientPhone.trim()}
-            className="w-full py-4 rounded-xl bg-primary text-primary-foreground font-bold text-lg transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed glow-gold"
-          >
-            {submitting ? "Agendando..." : "Confirmar Agendamento"}
-          </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Back button */}
       {step > 1 && (

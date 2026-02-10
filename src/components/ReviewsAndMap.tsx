@@ -18,7 +18,7 @@ const ReviewsAndMap = () => {
       {/* Google Maps */}
       <div className="glass-card rounded-xl overflow-hidden">
         <iframe
-          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3838.5!2d-48.2661512!3d-15.7414728!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x935bcda0ba3517e3%3A0x0!2sGoldblad!5e0!3m2!1spt-BR!2sbr!4v1700000000000"
+          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1919.25!2d-48.2661512!3d-15.7414728!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x935bcda0ba3517e3%3A0x4a6db7c6e3f1a2b5!2sGoldblad!5e0!3m2!1spt-BR!2sbr!4v1700000000000!5m2!1spt-BR!2sbr"
           width="100%"
           height="250"
           style={{ border: 0 }}
