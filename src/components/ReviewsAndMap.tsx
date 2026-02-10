@@ -18,7 +18,7 @@ const ReviewsAndMap = () => {
       {/* Google Maps */}
       <div className="glass-card rounded-xl overflow-hidden">
         <iframe
-          src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1919.25!2d-48.2661512!3d-15.7414728!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x935bcda0ba3517e3%3A0x4a6db7c6e3f1a2b5!2sGoldblad!5e0!3m2!1spt-BR!2sbr!4v1700000000000!5m2!1spt-BR!2sbr"
+          src="https://www.google.com/maps/place/Goldblad/@-15.7414728,-48.2681897,17z/data=!3m1!4b1!4m6!3m5!1s0x935bb900538931ff:0x90bf1902faa7c545!8m2!3d-15.741478!4d-48.2635763!16s%2Fg%2F11yxbzj5bn?entry=ttu&g_ep=EgoyMDI2MDIwNC4wIKXMDSoASAFQAw%3D%3D"
           width="100%"
           height="250"
           style={{ border: 0 }}
