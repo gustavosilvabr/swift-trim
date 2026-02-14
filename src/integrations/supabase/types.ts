@@ -23,7 +23,12 @@ export type Database = {
           client_phone: string
           created_at: string
           id: string
+          observation: string | null
+          payment_method: string | null
+          products_sold: string | null
+          service_type: string | null
           status: Database["public"]["Enums"]["appointment_status"]
+          total_amount: number | null
           updated_at: string
         }
         Insert: {
@@ -34,7 +39,12 @@ export type Database = {
           client_phone: string
           created_at?: string
           id?: string
+          observation?: string | null
+          payment_method?: string | null
+          products_sold?: string | null
+          service_type?: string | null
           status?: Database["public"]["Enums"]["appointment_status"]
+          total_amount?: number | null
           updated_at?: string
         }
         Update: {
@@ -45,7 +55,12 @@ export type Database = {
           client_phone?: string
           created_at?: string
           id?: string
+          observation?: string | null
+          payment_method?: string | null
+          products_sold?: string | null
+          service_type?: string | null
           status?: Database["public"]["Enums"]["appointment_status"]
+          total_amount?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -61,24 +76,33 @@ export type Database = {
       barbers: {
         Row: {
           created_at: string
+          default_price: number | null
           id: string
+          is_active: boolean | null
           name: string
           phone: string
           photo_url: string | null
+          specialty: string | null
         }
         Insert: {
           created_at?: string
+          default_price?: number | null
           id?: string
+          is_active?: boolean | null
           name: string
           phone: string
           photo_url?: string | null
+          specialty?: string | null
         }
         Update: {
           created_at?: string
+          default_price?: number | null
           id?: string
+          is_active?: boolean | null
           name?: string
           phone?: string
           photo_url?: string | null
+          specialty?: string | null
         }
         Relationships: []
       }
@@ -114,6 +138,108 @@ export type Database = {
           },
         ]
       }
+      client_messages: {
+        Row: {
+          client_name: string
+          client_phone: string
+          id: string
+          message_type: string
+          sent_at: string
+          status: string | null
+        }
+        Insert: {
+          client_name?: string
+          client_phone: string
+          id?: string
+          message_type?: string
+          sent_at?: string
+          status?: string | null
+        }
+        Update: {
+          client_name?: string
+          client_phone?: string
+          id?: string
+          message_type?: string
+          sent_at?: string
+          status?: string | null
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          description: string | null
+          expense_date: string
+          id: string
+        }
+        Insert: {
+          amount?: number
+          category: string
+          created_at?: string
+          description?: string | null
+          expense_date?: string
+          id?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          description?: string | null
+          expense_date?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      gallery_images: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          sort_order: number | null
+          title: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          sort_order?: number | null
+          title?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          sort_order?: number | null
+          title?: string | null
+        }
+        Relationships: []
+      }
+      site_settings: {
+        Row: {
+          created_at: string
+          id: string
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key: string
+          updated_at?: string
+          value?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       time_slots: {
         Row: {
           barber_id: string
@@ -148,6 +274,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      whatsapp_config: {
+        Row: {
+          days_threshold: number | null
+          enabled: boolean | null
+          id: string
+          message_template: string | null
+          updated_at: string
+        }
+        Insert: {
+          days_threshold?: number | null
+          enabled?: boolean | null
+          id?: string
+          message_template?: string | null
+          updated_at?: string
+        }
+        Update: {
+          days_threshold?: number | null
+          enabled?: boolean | null
+          id?: string
+          message_template?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

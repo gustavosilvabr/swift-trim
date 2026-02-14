@@ -87,4 +87,8 @@
   .glow-gold {
     box-shadow: 0 0 20px hsl(43 74% 49% / 0.15), 0 0 40px hsl(43 74% 49% / 0.05);
   }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
