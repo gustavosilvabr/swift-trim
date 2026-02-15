@@ -6,10 +6,12 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   LogOut, Check, X, Trash2, CheckCircle, Edit2, ArrowLeft,
-  User, Phone, DollarSign, Image, Settings, BarChart3,
+  User, Phone, DollarSign, Image, Settings, Clock,
   Upload, Plus, Eye, MessageCircle, Users
 } from "lucide-react";
 import { toast } from "sonner";
+import FinancialTab from "@/components/admin/FinancialTab";
+import WorkingHoursManager from "@/components/admin/WorkingHoursManager";
 
 type Session = Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"];
 
@@ -20,7 +22,7 @@ const statusColors: Record<string, string> = {
   cancelado: "bg-red-500/20 text-red-400",
 };
 
-type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "settings";
+type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "hours" | "settings";
 
 interface Expense {
   id: string;
@@ -51,9 +53,6 @@ const Admin = () => {
 
   // Financial
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [newExpCategory, setNewExpCategory] = useState("aluguel");
-  const [newExpDesc, setNewExpDesc] = useState("");
-  const [newExpAmount, setNewExpAmount] = useState("");
 
   // Appointment editing
   const [editingAppointment, setEditingAppointment] = useState<string | null>(null);
@@ -84,7 +83,6 @@ const Admin = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch expenses
   useEffect(() => {
     if (!session) return;
     const fetchExpenses = async () => {
@@ -96,7 +94,6 @@ const Admin = () => {
     return () => { supabase.removeChannel(ch); };
   }, [session]);
 
-  // Fetch gallery
   useEffect(() => {
     if (!session) return;
     const fetchGallery = async () => {
@@ -191,18 +188,6 @@ const Admin = () => {
     toast.success("Foto da fachada atualizada");
   };
 
-  const addExpense = async () => {
-    if (!newExpAmount) return;
-    await supabase.from("expenses").insert({
-      category: newExpCategory,
-      description: newExpDesc,
-      amount: parseFloat(newExpAmount) || 0,
-    });
-    setNewExpDesc("");
-    setNewExpAmount("");
-    toast.success("Despesa adicionada");
-  };
-
   const handleChangeEmail = async () => {
     if (!newEmail.trim()) return;
     const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
@@ -216,7 +201,6 @@ const Admin = () => {
       toast.error("Senhas não conferem");
       return;
     }
-    // Verify current password by re-authenticating
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: session?.user?.email || "",
       password: currentPw,
@@ -272,32 +256,15 @@ const Admin = () => {
   const confirmados = appointments.filter((a) => a.status === "confirmado");
   const concluidos = appointments.filter((a) => a.status === "concluido");
 
-  // Financial calculations
-  const today = format(new Date(), "yyyy-MM-dd");
   const thisMonth = format(new Date(), "yyyy-MM");
   const thisYear = format(new Date(), "yyyy");
-
-  const revenueToday = concluidos.filter((a) => a.appointment_date === today).reduce((s, a) => s + (Number((a as any).total_amount) || 0), 0);
-  const revenueMonth = concluidos.filter((a) => a.appointment_date.startsWith(thisMonth)).reduce((s, a) => s + (Number((a as any).total_amount) || 0), 0);
-  const revenueYear = concluidos.filter((a) => a.appointment_date.startsWith(thisYear)).reduce((s, a) => s + (Number((a as any).total_amount) || 0), 0);
-  const expensesMonth = expenses.filter((e) => e.expense_date.startsWith(thisMonth)).reduce((s, e) => s + e.amount, 0);
-  const profitMonth = revenueMonth - expensesMonth;
-
-  // Client history
-  const clientMap = new Map<string, { name: string; phone: string; cuts: typeof appointments; lastCut: string | null }>();
-  appointments.filter((a) => a.status === "concluido").forEach((a) => {
-    const key = a.client_phone;
-    if (!clientMap.has(key)) clientMap.set(key, { name: a.client_name, phone: a.client_phone, cuts: [], lastCut: null });
-    const c = clientMap.get(key)!;
-    c.cuts.push(a);
-    if (!c.lastCut || a.appointment_date > c.lastCut) c.lastCut = a.appointment_date;
-  });
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "appointments", label: "Agenda", icon: <CheckCircle className="w-4 h-4" /> },
     { id: "barbers", label: "Barbeiros", icon: <User className="w-4 h-4" /> },
     { id: "financial", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
     { id: "clients", label: "Clientes", icon: <Users className="w-4 h-4" /> },
+    { id: "hours", label: "Horários", icon: <Clock className="w-4 h-4" /> },
     { id: "gallery", label: "Galeria", icon: <Image className="w-4 h-4" /> },
     { id: "settings", label: "Config", icon: <Settings className="w-4 h-4" /> },
   ];
@@ -339,7 +306,7 @@ const Admin = () => {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${activeTab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
@@ -414,12 +381,10 @@ const Admin = () => {
         {/* BARBERS TAB */}
         {activeTab === "barbers" && (
           <div className="space-y-4">
-            {/* Facade upload */}
             <div className="glass-card rounded-xl p-4 space-y-3">
               <p className="font-display font-semibold text-foreground">Foto da Fachada</p>
               <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFacadeUpload(f); }} className="text-sm text-muted-foreground" />
             </div>
-
             {barbers.map((b) => (
               <div key={b.id} className="glass-card rounded-xl p-4 space-y-4">
                 <div className="flex items-center gap-4">
@@ -461,94 +426,73 @@ const Admin = () => {
 
         {/* FINANCIAL TAB */}
         {activeTab === "financial" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="glass-card rounded-xl p-4 text-center"><p className="text-xs text-muted-foreground">Hoje</p><p className="text-xl font-bold text-green-400">R$ {revenueToday.toFixed(2)}</p></div>
-              <div className="glass-card rounded-xl p-4 text-center"><p className="text-xs text-muted-foreground">Mês</p><p className="text-xl font-bold text-green-400">R$ {revenueMonth.toFixed(2)}</p></div>
-              <div className="glass-card rounded-xl p-4 text-center"><p className="text-xs text-muted-foreground">Ano</p><p className="text-xl font-bold text-green-400">R$ {revenueYear.toFixed(2)}</p></div>
-              <div className="glass-card rounded-xl p-4 text-center"><p className="text-xs text-muted-foreground">Lucro Mês</p><p className={`text-xl font-bold ${profitMonth >= 0 ? "text-green-400" : "text-red-400"}`}>R$ {profitMonth.toFixed(2)}</p></div>
-            </div>
-
-            {/* Per barber revenue */}
-            <div className="glass-card rounded-xl p-4 space-y-3">
-              <p className="font-display font-semibold text-foreground">Faturamento por Barbeiro (Mês)</p>
-              {barbers.map((b) => {
-                const rev = concluidos.filter((a) => a.barber_id === b.id && a.appointment_date.startsWith(thisMonth)).reduce((s, a) => s + (Number((a as any).total_amount) || 0), 0);
-                return (
-                  <div key={b.id} className="flex justify-between items-center text-sm">
-                    <span className="text-foreground">{b.name}</span>
-                    <span className="text-green-400 font-semibold">R$ {rev.toFixed(2)}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Expenses */}
-            <div className="glass-card rounded-xl p-4 space-y-3">
-              <p className="font-display font-semibold text-foreground">Despesas do Mês: <span className="text-red-400">R$ {expensesMonth.toFixed(2)}</span></p>
-              <div className="space-y-2">
-                <select value={newExpCategory} onChange={(e) => setNewExpCategory(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border">
-                  <option value="aluguel">Aluguel</option>
-                  <option value="produtos">Produtos</option>
-                  <option value="agua">Água</option>
-                  <option value="luz">Luz</option>
-                  <option value="outros">Outros</option>
-                </select>
-                <input type="text" placeholder="Descrição" value={newExpDesc} onChange={(e) => setNewExpDesc(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-                <input type="number" placeholder="Valor (R$)" value={newExpAmount} onChange={(e) => setNewExpAmount(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-                <button onClick={addExpense} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"><Plus className="w-4 h-4 inline mr-1" />Adicionar Despesa</button>
-              </div>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {expenses.filter((e) => e.expense_date.startsWith(thisMonth)).map((e) => (
-                  <div key={e.id} className="flex justify-between text-xs text-muted-foreground bg-secondary/50 rounded-lg px-3 py-2">
-                    <span className="capitalize">{e.category}{e.description ? ` - ${e.description}` : ""}</span>
-                    <span className="text-red-400">R$ {e.amount.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <FinancialTab
+            appointments={appointments}
+            barbers={barbers}
+            expenses={expenses}
+            setExpenses={setExpenses}
+          />
         )}
 
         {/* CLIENTS TAB */}
         {activeTab === "clients" && (
           <div className="space-y-3">
             <p className="font-display font-semibold text-foreground text-lg">Histórico de Clientes</p>
-            {Array.from(clientMap.values()).sort((a, b) => (b.lastCut || "").localeCompare(a.lastCut || "")).map((c) => {
-              const daysSinceCut = c.lastCut ? Math.floor((Date.now() - new Date(c.lastCut + "T00:00:00").getTime()) / 86400000) : 999;
-              const statusColor = daysSinceCut > 30 ? "text-red-400" : daysSinceCut > 15 ? "text-yellow-400" : "text-green-400";
-              const thisMonthCuts = c.cuts.filter((a) => a.appointment_date.startsWith(thisMonth)).length;
-              const thisYearCuts = c.cuts.filter((a) => a.appointment_date.startsWith(thisYear)).length;
-              const lastBarber = c.cuts.length > 0 ? getBarberName(c.cuts[c.cuts.length - 1].barber_id) : "—";
-              const waMsg = encodeURIComponent("Fala meu parceiro! Já tem mais de 15 dias desde seu último corte 😎 Bora ficar na régua novamente? Clique aqui e agende seu horário!");
-              const waLink = `https://wa.me/${c.phone.replace(/\D/g, "")}?text=${waMsg}`;
+            {(() => {
+              const clientMap = new Map<string, { name: string; phone: string; cuts: typeof appointments; lastCut: string | null }>();
+              appointments.filter((a) => a.status === "concluido").forEach((a) => {
+                const key = a.client_phone;
+                if (!clientMap.has(key)) clientMap.set(key, { name: a.client_name, phone: a.client_phone, cuts: [], lastCut: null });
+                const c = clientMap.get(key)!;
+                c.cuts.push(a);
+                if (!c.lastCut || a.appointment_date > c.lastCut) c.lastCut = a.appointment_date;
+              });
 
               return (
-                <div key={c.phone} className="glass-card rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-foreground">{c.name}</p>
-                      <p className="text-xs text-muted-foreground">{c.phone}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold ${statusColor}`}>{daysSinceCut}d</span>
-                      <a href={waLink} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30">
-                        <MessageCircle className="w-4 h-4" />
-                      </a>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 text-xs text-center">
-                    <div><p className="text-muted-foreground">Mês</p><p className="font-bold text-foreground">{thisMonthCuts}</p></div>
-                    <div><p className="text-muted-foreground">Ano</p><p className="font-bold text-foreground">{thisYearCuts}</p></div>
-                    <div><p className="text-muted-foreground">Total</p><p className="font-bold text-foreground">{c.cuts.length}</p></div>
-                    <div><p className="text-muted-foreground">Barbeiro</p><p className="font-bold text-foreground truncate">{lastBarber}</p></div>
-                  </div>
-                  {c.lastCut && <p className="text-xs text-muted-foreground">Último: {format(new Date(c.lastCut + "T00:00:00"), "dd/MM/yyyy")}</p>}
-                </div>
+                <>
+                  {Array.from(clientMap.values()).sort((a, b) => (b.lastCut || "").localeCompare(a.lastCut || "")).map((c) => {
+                    const daysSinceCut = c.lastCut ? Math.floor((Date.now() - new Date(c.lastCut + "T00:00:00").getTime()) / 86400000) : 999;
+                    const statusColor = daysSinceCut > 30 ? "text-red-400" : daysSinceCut > 15 ? "text-yellow-400" : "text-green-400";
+                    const thisMonthCuts = c.cuts.filter((a) => a.appointment_date.startsWith(thisMonth)).length;
+                    const thisYearCuts = c.cuts.filter((a) => a.appointment_date.startsWith(thisYear)).length;
+                    const lastBarber = c.cuts.length > 0 ? getBarberName(c.cuts[c.cuts.length - 1].barber_id) : "—";
+                    const waMsg = encodeURIComponent("Fala meu parceiro! Já tem mais de 15 dias desde seu último corte 😎 Bora ficar na régua novamente? Clique aqui e agende seu horário!");
+                    const waLink = `https://wa.me/${c.phone.replace(/\D/g, "")}?text=${waMsg}`;
+
+                    return (
+                      <div key={c.phone} className="glass-card rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-foreground">{c.name}</p>
+                            <p className="text-xs text-muted-foreground">{c.phone}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold ${statusColor}`}>{daysSinceCut}d</span>
+                            <a href={waLink} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30">
+                              <MessageCircle className="w-4 h-4" />
+                            </a>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-xs text-center">
+                          <div><p className="text-muted-foreground">Mês</p><p className="font-bold text-foreground">{thisMonthCuts}</p></div>
+                          <div><p className="text-muted-foreground">Ano</p><p className="font-bold text-foreground">{thisYearCuts}</p></div>
+                          <div><p className="text-muted-foreground">Total</p><p className="font-bold text-foreground">{c.cuts.length}</p></div>
+                          <div><p className="text-muted-foreground">Barbeiro</p><p className="font-bold text-foreground truncate">{lastBarber}</p></div>
+                        </div>
+                        {c.lastCut && <p className="text-xs text-muted-foreground">Último: {format(new Date(c.lastCut + "T00:00:00"), "dd/MM/yyyy")}</p>}
+                      </div>
+                    );
+                  })}
+                  {clientMap.size === 0 && <p className="text-center text-muted-foreground py-8">Nenhum cliente com corte concluído</p>}
+                </>
               );
-            })}
-            {clientMap.size === 0 && <p className="text-center text-muted-foreground py-8">Nenhum cliente com corte concluído</p>}
+            })()}
           </div>
+        )}
+
+        {/* WORKING HOURS TAB */}
+        {activeTab === "hours" && (
+          <WorkingHoursManager barbers={barbers} />
         )}
 
         {/* GALLERY TAB */}

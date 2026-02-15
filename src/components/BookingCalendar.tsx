@@ -34,7 +34,7 @@ const BookingCalendar = ({ selectedDate, onSelectDate, blockedSlots }: BookingCa
   };
 
   const isDisabled = (date: Date) => {
-    return isBefore(date, today) || date.getDay() === 0 || isBlocked(date);
+    return isBefore(date, today) || isBlocked(date);
   };
 
   const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
