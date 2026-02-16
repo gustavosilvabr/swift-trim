@@ -127,3 +127,41 @@ export function useTimeSlots(barberId?: string, dayOfWeek?: number) {
 
   return slots;
 }
+
+export interface Service {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export function useServices() {
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetch = async () => {
+      const { data } = await supabase
+        .from("services")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order");
+      if (data) setServices(data as Service[]);
+      setLoading(false);
+    };
+    fetch();
+
+    const channel = supabase
+      .channel("services-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "services" }, () => {
+        fetch();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  return { services, loading };
+}

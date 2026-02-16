@@ -5,24 +5,25 @@ import { useAppointments, useBarbers, Appointment } from "@/hooks/useSupabase";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  LogOut, Check, X, Trash2, CheckCircle, Edit2, ArrowLeft,
+  LogOut, Check, X, Trash2, Edit2, ArrowLeft,
   User, Phone, DollarSign, Image, Settings, Clock,
-  Upload, Plus, Eye, MessageCircle, Users
+  Upload, Plus, Eye, MessageCircle, Users, Scissors
 } from "lucide-react";
 import { toast } from "sonner";
 import FinancialTab from "@/components/admin/FinancialTab";
 import WorkingHoursManager from "@/components/admin/WorkingHoursManager";
+import ServicesManager from "@/components/admin/ServicesManager";
+import UpcomingAppointments from "@/components/admin/UpcomingAppointments";
 
 type Session = Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"];
 
 const statusColors: Record<string, string> = {
   pendente: "bg-yellow-500/20 text-yellow-400",
-  confirmado: "bg-blue-500/20 text-blue-400",
-  concluido: "bg-green-500/20 text-green-400",
+  confirmado: "bg-green-500/20 text-green-400",
   cancelado: "bg-red-500/20 text-red-400",
 };
 
-type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "hours" | "settings";
+type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "hours" | "services" | "settings";
 
 interface Expense {
   id: string;
@@ -51,10 +52,8 @@ const Admin = () => {
   const [barberActive, setBarberActive] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("appointments");
 
-  // Financial
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
-  // Appointment editing
   const [editingAppointment, setEditingAppointment] = useState<string | null>(null);
   const [editServiceType, setEditServiceType] = useState("corte");
   const [editProducts, setEditProducts] = useState("");
@@ -62,10 +61,8 @@ const Admin = () => {
   const [editObs, setEditObs] = useState("");
   const [editPayment, setEditPayment] = useState("");
 
-  // Gallery
   const [galleryImages, setGalleryImages] = useState<{ id: string; image_url: string; title: string }[]>([]);
 
-  // Settings
   const [newEmail, setNewEmail] = useState("");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -254,20 +251,20 @@ const Admin = () => {
   const getBarberName = (id: string) => barbers.find((b) => b.id === id)?.name || "—";
   const pendentes = appointments.filter((a) => a.status === "pendente");
   const confirmados = appointments.filter((a) => a.status === "confirmado");
-  const concluidos = appointments.filter((a) => a.status === "concluido");
-
-  const thisMonth = format(new Date(), "yyyy-MM");
-  const thisYear = format(new Date(), "yyyy");
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "appointments", label: "Agenda", icon: <CheckCircle className="w-4 h-4" /> },
+    { id: "appointments", label: "Agenda", icon: <Clock className="w-4 h-4" /> },
     { id: "barbers", label: "Barbeiros", icon: <User className="w-4 h-4" /> },
     { id: "financial", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
+    { id: "services", label: "Serviços", icon: <Scissors className="w-4 h-4" /> },
     { id: "clients", label: "Clientes", icon: <Users className="w-4 h-4" /> },
     { id: "hours", label: "Horários", icon: <Clock className="w-4 h-4" /> },
     { id: "gallery", label: "Galeria", icon: <Image className="w-4 h-4" /> },
     { id: "settings", label: "Config", icon: <Settings className="w-4 h-4" /> },
   ];
+
+  const thisMonth = format(new Date(), "yyyy-MM");
+  const thisYear = format(new Date(), "yyyy");
 
   return (
     <div className="min-h-screen bg-background">
@@ -282,11 +279,19 @@ const Admin = () => {
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-6 pb-12">
         {/* Dashboard cards */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="glass-card rounded-xl p-4 text-center"><p className="text-2xl font-bold text-yellow-400">{pendentes.length}</p><p className="text-xs text-muted-foreground mt-1">Pendentes</p></div>
-          <div className="glass-card rounded-xl p-4 text-center"><p className="text-2xl font-bold text-blue-400">{confirmados.length}</p><p className="text-xs text-muted-foreground mt-1">Confirmados</p></div>
-          <div className="glass-card rounded-xl p-4 text-center"><p className="text-2xl font-bold text-green-400">{concluidos.length}</p><p className="text-xs text-muted-foreground mt-1">Concluídos</p></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="glass-card rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-yellow-400">{pendentes.length}</p>
+            <p className="text-xs text-muted-foreground mt-1">Pendentes</p>
+          </div>
+          <div className="glass-card rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-green-400">{confirmados.length}</p>
+            <p className="text-xs text-muted-foreground mt-1">Confirmados</p>
+          </div>
         </div>
+
+        {/* Upcoming appointments */}
+        <UpcomingAppointments appointments={appointments} barbers={barbers} />
 
         {/* Per barber stats */}
         <div className="grid grid-cols-2 gap-3">
@@ -297,8 +302,7 @@ const Admin = () => {
                 <p className="font-display font-semibold text-foreground mb-2">{b.name}</p>
                 <div className="space-y-1 text-xs">
                   <p className="text-yellow-400">{bApps.filter((a) => a.status === "pendente").length} pendentes</p>
-                  <p className="text-blue-400">{bApps.filter((a) => a.status === "confirmado").length} confirmados</p>
-                  <p className="text-green-400">{bApps.filter((a) => a.status === "concluido").length} concluídos</p>
+                  <p className="text-green-400">{bApps.filter((a) => a.status === "confirmado").length} confirmados</p>
                 </div>
               </div>
             );
@@ -326,21 +330,21 @@ const Admin = () => {
                     <p className="font-semibold text-foreground">{a.client_name}</p>
                     <p className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" /> {a.client_phone}</p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColors[a.status]}`}>{a.status}</span>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColors[a.status] || "bg-secondary text-muted-foreground"}`}>{a.status}</span>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
                   <span>{getBarberName(a.barber_id)}</span>
                   <span>{format(new Date(a.appointment_date + "T00:00:00"), "dd/MM", { locale: ptBR })}</span>
                   <span>{a.appointment_time.substring(0, 5)}</span>
                 </div>
+                {(a as any).service_type && (
+                  <p className="text-xs text-primary">{(a as any).service_type} {(a as any).total_amount > 0 ? `• R$ ${Number((a as any).total_amount).toFixed(2)}` : ""}</p>
+                )}
                 <div className="flex gap-2 flex-wrap">
                   {a.status === "pendente" && (
-                    <button onClick={() => updateStatus(a.id, "confirmado")} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"><Check className="w-3 h-3" /> Confirmar</button>
+                    <button onClick={() => updateStatus(a.id, "confirmado")} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"><Check className="w-3 h-3" /> Confirmar</button>
                   )}
-                  {(a.status === "pendente" || a.status === "confirmado") && (
-                    <button onClick={() => updateStatus(a.id, "concluido")} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"><CheckCircle className="w-3 h-3" /> Concluir</button>
-                  )}
-                  {a.status !== "cancelado" && a.status !== "concluido" && (
+                  {a.status !== "cancelado" && (
                     <button onClick={() => updateStatus(a.id, "cancelado")} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"><X className="w-3 h-3" /> Cancelar</button>
                   )}
                   <button onClick={() => {
@@ -356,11 +360,7 @@ const Admin = () => {
                 </div>
                 {editingAppointment === a.id && (
                   <div className="space-y-3 pt-2 border-t border-border animate-fade-in">
-                    <select value={editServiceType} onChange={(e) => setEditServiceType(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border">
-                      <option value="corte">Corte</option>
-                      <option value="sobrancelha">Sobrancelha</option>
-                      <option value="corte_sobrancelha">Corte + Sobrancelha</option>
-                    </select>
+                    <input type="text" placeholder="Tipo de serviço" value={editServiceType} onChange={(e) => setEditServiceType(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
                     <input type="text" placeholder="Produtos vendidos" value={editProducts} onChange={(e) => setEditProducts(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
                     <input type="number" placeholder="Valor total (R$)" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
                     <input type="text" placeholder="Observação" value={editObs} onChange={(e) => setEditObs(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
@@ -426,13 +426,11 @@ const Admin = () => {
 
         {/* FINANCIAL TAB */}
         {activeTab === "financial" && (
-          <FinancialTab
-            appointments={appointments}
-            barbers={barbers}
-            expenses={expenses}
-            setExpenses={setExpenses}
-          />
+          <FinancialTab appointments={appointments} barbers={barbers} expenses={expenses} setExpenses={setExpenses} />
         )}
+
+        {/* SERVICES TAB */}
+        {activeTab === "services" && <ServicesManager />}
 
         {/* CLIENTS TAB */}
         {activeTab === "clients" && (
@@ -440,7 +438,7 @@ const Admin = () => {
             <p className="font-display font-semibold text-foreground text-lg">Histórico de Clientes</p>
             {(() => {
               const clientMap = new Map<string, { name: string; phone: string; cuts: typeof appointments; lastCut: string | null }>();
-              appointments.filter((a) => a.status === "concluido").forEach((a) => {
+              appointments.filter((a) => a.status === "confirmado" || a.status === "concluido").forEach((a) => {
                 const key = a.client_phone;
                 if (!clientMap.has(key)) clientMap.set(key, { name: a.client_name, phone: a.client_phone, cuts: [], lastCut: null });
                 const c = clientMap.get(key)!;
@@ -456,7 +454,7 @@ const Admin = () => {
                     const thisMonthCuts = c.cuts.filter((a) => a.appointment_date.startsWith(thisMonth)).length;
                     const thisYearCuts = c.cuts.filter((a) => a.appointment_date.startsWith(thisYear)).length;
                     const lastBarber = c.cuts.length > 0 ? getBarberName(c.cuts[c.cuts.length - 1].barber_id) : "—";
-                    const waMsg = encodeURIComponent("Fala meu parceiro! Já tem mais de 15 dias desde seu último corte 😎 Bora ficar na régua novamente? Clique aqui e agende seu horário!");
+                    const waMsg = encodeURIComponent("Fala meu parceiro! Já tem mais de 15 dias desde seu último corte 😎 Bora ficar na régua novamente?");
                     const waLink = `https://wa.me/${c.phone.replace(/\D/g, "")}?text=${waMsg}`;
 
                     return (
@@ -483,7 +481,7 @@ const Admin = () => {
                       </div>
                     );
                   })}
-                  {clientMap.size === 0 && <p className="text-center text-muted-foreground py-8">Nenhum cliente com corte concluído</p>}
+                  {clientMap.size === 0 && <p className="text-center text-muted-foreground py-8">Nenhum cliente com atendimento</p>}
                 </>
               );
             })()}
@@ -491,9 +489,7 @@ const Admin = () => {
         )}
 
         {/* WORKING HOURS TAB */}
-        {activeTab === "hours" && (
-          <WorkingHoursManager barbers={barbers} />
-        )}
+        {activeTab === "hours" && <WorkingHoursManager barbers={barbers} />}
 
         {/* GALLERY TAB */}
         {activeTab === "gallery" && (
