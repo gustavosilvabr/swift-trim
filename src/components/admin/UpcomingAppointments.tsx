@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Clock, User, Phone, MessageCircle, Scissors } from "lucide-react";
+import { Clock, User, Phone, MessageCircle, Scissors, Calendar } from "lucide-react";
 import { Appointment } from "@/hooks/useSupabase";
 
 interface Props {
@@ -41,45 +41,50 @@ const UpcomingAppointments = ({ appointments, barbers }: Props) => {
 
   if (upcoming.length === 0) {
     return (
-      <div className="glass-card rounded-xl p-6 text-center">
-        <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-        <p className="text-muted-foreground text-sm">Nenhum agendamento próximo</p>
+      <div className="pro-card rounded-xl p-8 text-center">
+        <Calendar className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+        <p className="text-muted-foreground text-sm font-medium">Nenhum agendamento próximo</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Clock className="w-5 h-5 text-primary" />
-        <h3 className="font-display font-bold text-foreground">Próximos Agendamentos</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="font-display text-sm font-bold text-foreground flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary" />
+          Próximos Agendamentos
+        </h3>
+        <span className="text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+          {upcoming.length}
+        </span>
       </div>
       <div className="space-y-2">
-        {upcoming.map((a) => {
+        {upcoming.map((a, index) => {
           const waLink = `https://wa.me/${a.client_phone.replace(/\D/g, "")}`;
           return (
-            <div key={a.id} className="glass-card rounded-xl p-4 flex items-center gap-4">
-              {/* Time circle */}
-              <div className="w-14 h-14 rounded-full border-2 border-primary flex flex-col items-center justify-center flex-shrink-0 glow-gold">
-                <span className="text-primary font-bold text-sm leading-none">{a.appointment_time.substring(0, 5)}</span>
-                <span className="text-[10px] text-muted-foreground leading-none mt-0.5">{getDateLabel(a.appointment_date)}</span>
+            <div
+              key={a.id}
+              className="pro-card rounded-xl p-3.5 flex items-center gap-3 animate-slide-up"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              {/* Time */}
+              <div className="w-12 h-12 rounded-xl gold-gradient flex flex-col items-center justify-center flex-shrink-0 shadow-md">
+                <span className="text-primary-foreground font-bold text-xs leading-none">{a.appointment_time.substring(0, 5)}</span>
+                <span className="text-primary-foreground/70 text-[8px] leading-none mt-0.5">{getDateLabel(a.appointment_date)}</span>
               </div>
               {/* Info */}
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-foreground text-sm truncate flex items-center gap-1">
-                  <User className="w-3 h-3 flex-shrink-0" /> {a.client_name}
-                </p>
-                <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                  <Phone className="w-3 h-3 flex-shrink-0" /> {a.client_phone}
-                </p>
-                <p className="text-xs text-primary truncate flex items-center gap-1">
-                  <Scissors className="w-3 h-3 flex-shrink-0" /> {(a as any).service_type || "Corte"} • {getBarberName(a.barber_id)}
+                <p className="font-semibold text-foreground text-xs truncate">{a.client_name}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{a.client_phone}</p>
+                <p className="text-[10px] text-primary truncate">
+                  {(a as any).service_type || "Corte"} • {getBarberName(a.barber_id)}
                 </p>
               </div>
               {/* WhatsApp */}
               <a href={waLink} target="_blank" rel="noopener noreferrer"
-                className="p-2.5 rounded-full bg-green-500/20 text-green-400 hover:bg-green-500/30 flex-shrink-0">
-                <MessageCircle className="w-5 h-5" />
+                className="p-2 rounded-lg bg-[#25D366]/15 text-[#25D366] hover:bg-[#25D366]/25 flex-shrink-0 transition-colors">
+                <MessageCircle className="w-4 h-4" />
               </a>
             </div>
           );

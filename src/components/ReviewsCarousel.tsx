@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Star } from "lucide-react";
+import { Star, Quote } from "lucide-react";
 
 const reviews = [
   { name: "Lucas Oliveira", text: "Melhor barbearia da região! Atendimento top demais." },
@@ -34,33 +34,33 @@ const ReviewsCarousel = () => {
 
   return (
     <section className="space-y-4 animate-fade-in">
-      <h2 className="font-display text-2xl font-bold text-center gold-text">Avaliações</h2>
+      <h2 className="font-display text-xl font-bold text-center text-foreground">
+        O que dizem nossos <span className="gold-text">clientes</span>
+      </h2>
       <div
         ref={scrollRef}
-        className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide"
+        className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide"
         onTouchStart={() => setPaused(true)}
         onTouchEnd={() => setPaused(false)}
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {reviews.map((r, i) => (
-          <div
-            key={i}
-            className="min-w-[240px] max-w-[240px] glass-card rounded-xl p-4 snap-start flex-shrink-0 space-y-3"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+          <div key={i} className="min-w-[220px] max-w-[220px] pro-card rounded-xl p-4 snap-start flex-shrink-0 space-y-3 relative">
+            <Quote className="w-6 h-6 text-primary/20 absolute top-3 right-3" />
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full gold-gradient flex items-center justify-center text-primary-foreground font-bold text-xs">
                 {r.name.charAt(0)}
               </div>
               <div>
-                <p className="text-sm font-semibold text-foreground">{r.name}</p>
+                <p className="text-xs font-semibold text-foreground">{r.name}</p>
                 <div className="flex gap-0.5">
                   {[1, 2, 3, 4, 5].map((s) => (
-                    <Star key={s} className="w-3 h-3 fill-primary text-primary" />
+                    <Star key={s} className="w-2.5 h-2.5 fill-primary text-primary" />
                   ))}
                 </div>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">{r.text}</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">{r.text}</p>
           </div>
         ))}
       </div>
