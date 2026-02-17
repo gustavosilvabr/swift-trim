@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, startOfYear, endOfYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Edit2, Trash2, Calendar, TrendingUp, TrendingDown, DollarSign, Users } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, TrendingUp, TrendingDown, DollarSign, Users, BarChart3, LineChart as LineChartIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Appointment } from "@/hooks/useSupabase";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -59,11 +59,9 @@ const FinancialTab = ({ appointments, barbers, expenses, setExpenses }: Props) =
   const totalExpenses = filteredExpenses.reduce((s, e) => s + e.amount, 0);
   const profit = revenue - totalExpenses;
 
-  // Chart data
   const chartData = useMemo(() => {
     try {
       const days = eachDayOfInterval({ start: parseISO(dateRange.start), end: parseISO(dateRange.end) });
-      // Limit to 31 days for performance
       const sliced = days.length > 31 ? days.filter((_, i) => i % Math.ceil(days.length / 31) === 0) : days;
       return sliced.map((day) => {
         const dayStr = format(day, "yyyy-MM-dd");
@@ -75,7 +73,6 @@ const FinancialTab = ({ appointments, barbers, expenses, setExpenses }: Props) =
     } catch { return []; }
   }, [dateRange, confirmados, expenses]);
 
-  // Per barber breakdown
   const barberBreakdown = useMemo(() => {
     return barbers.map((b) => {
       const bApps = confirmados.filter((a) => a.barber_id === b.id);
@@ -112,17 +109,17 @@ const FinancialTab = ({ appointments, barbers, expenses, setExpenses }: Props) =
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Date filter */}
-      <div className="glass-card rounded-xl p-4 space-y-3">
+      <div className="pro-card rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-primary" />
-          <p className="font-display font-semibold text-foreground text-sm">Período</p>
+          <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider">Período</p>
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {(Object.keys(filterLabels) as DateFilter[]).map((f) => (
             <button key={f} onClick={() => setDateFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${dateFilter === f ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${dateFilter === f ? "tab-active" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
               {filterLabels[f]}
             </button>
           ))}
@@ -136,101 +133,108 @@ const FinancialTab = ({ appointments, barbers, expenses, setExpenses }: Props) =
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="glass-card rounded-xl p-4 text-center">
-          <TrendingUp className="w-5 h-5 text-green-400 mx-auto mb-1" />
-          <p className="text-xs text-muted-foreground">Receita</p>
-          <p className="text-lg font-bold text-green-400">R$ {revenue.toFixed(2)}</p>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="stat-card rounded-xl p-3 text-center">
+          <TrendingUp className="w-4 h-4 text-[hsl(142,71%,45%)] mx-auto mb-1" />
+          <p className="text-[10px] text-muted-foreground font-medium">Receita</p>
+          <p className="text-sm font-bold text-[hsl(142,71%,45%)]">R$ {revenue.toFixed(0)}</p>
         </div>
-        <div className="glass-card rounded-xl p-4 text-center">
-          <TrendingDown className="w-5 h-5 text-red-400 mx-auto mb-1" />
-          <p className="text-xs text-muted-foreground">Despesas</p>
-          <p className="text-lg font-bold text-red-400">R$ {totalExpenses.toFixed(2)}</p>
+        <div className="stat-card rounded-xl p-3 text-center">
+          <TrendingDown className="w-4 h-4 text-destructive mx-auto mb-1" />
+          <p className="text-[10px] text-muted-foreground font-medium">Despesas</p>
+          <p className="text-sm font-bold text-destructive">R$ {totalExpenses.toFixed(0)}</p>
         </div>
-        <div className="glass-card rounded-xl p-4 text-center">
-          <DollarSign className="w-5 h-5 text-primary mx-auto mb-1" />
-          <p className="text-xs text-muted-foreground">Lucro</p>
-          <p className={`text-lg font-bold ${profit >= 0 ? "text-green-400" : "text-red-400"}`}>R$ {profit.toFixed(2)}</p>
+        <div className="stat-card rounded-xl p-3 text-center">
+          <DollarSign className="w-4 h-4 text-primary mx-auto mb-1" />
+          <p className="text-[10px] text-muted-foreground font-medium">Lucro</p>
+          <p className={`text-sm font-bold ${profit >= 0 ? "text-[hsl(142,71%,45%)]" : "text-destructive"}`}>R$ {profit.toFixed(0)}</p>
         </div>
       </div>
 
-      {/* Bar Chart */}
+      {/* Charts */}
       {chartData.length > 1 && (
-        <div className="glass-card rounded-xl p-4 space-y-3">
-          <p className="font-display font-semibold text-foreground text-sm">📊 Receita vs Despesas</p>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 12% 18%)" />
-                <XAxis dataKey="name" tick={{ fill: "hsl(220 10% 55%)", fontSize: 10 }} />
-                <YAxis tick={{ fill: "hsl(220 10% 55%)", fontSize: 10 }} />
-                <Tooltip contentStyle={{ backgroundColor: "hsl(220 14% 11%)", border: "1px solid hsl(220 12% 18%)", borderRadius: 8, color: "hsl(40 20% 92%)" }} />
-                <Bar dataKey="receita" fill="hsl(142 71% 45%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="despesas" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Line Chart */}
-      {chartData.length > 1 && (
-        <div className="glass-card rounded-xl p-4 space-y-3">
-          <p className="font-display font-semibold text-foreground text-sm">📈 Evolução da Receita</p>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 12% 18%)" />
-                <XAxis dataKey="name" tick={{ fill: "hsl(220 10% 55%)", fontSize: 10 }} />
-                <YAxis tick={{ fill: "hsl(220 10% 55%)", fontSize: 10 }} />
-                <Tooltip contentStyle={{ backgroundColor: "hsl(220 14% 11%)", border: "1px solid hsl(220 12% 18%)", borderRadius: 8, color: "hsl(40 20% 92%)" }} />
-                <Line type="monotone" dataKey="receita" stroke="hsl(43 74% 49%)" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="despesas" stroke="hsl(0 72% 51%)" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Per barber breakdown */}
-      <div className="glass-card rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-primary" />
-          <p className="font-display font-semibold text-foreground text-sm">Faturamento por Barbeiro</p>
-        </div>
-        {barberBreakdown.map((b) => (
-          <div key={b.id} className="bg-secondary/50 rounded-lg p-3 space-y-1">
-            <div className="flex justify-between items-center">
-              <span className="text-foreground font-semibold text-sm">{b.name}</span>
-              <span className="text-green-400 font-bold text-sm">R$ {b.totalRev.toFixed(2)}</span>
+        <>
+          <div className="pro-card rounded-xl p-4 space-y-3">
+            <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider flex items-center gap-1.5">
+              <BarChart3 className="w-3.5 h-3.5 text-primary" /> Receita vs Despesas
+            </p>
+            <div className="h-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 14% 16%)" />
+                  <XAxis dataKey="name" tick={{ fill: "hsl(220 10% 50%)", fontSize: 9 }} />
+                  <YAxis tick={{ fill: "hsl(220 10% 50%)", fontSize: 9 }} />
+                  <Tooltip contentStyle={{ backgroundColor: "hsl(220 18% 10%)", border: "1px solid hsl(220 14% 18%)", borderRadius: 8, color: "hsl(0 0% 95%)", fontSize: 11 }} />
+                  <Bar dataKey="receita" fill="hsl(142 71% 45%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="despesas" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <p className="text-xs text-muted-foreground">{b.cuts} atendimentos no período</p>
+          </div>
+
+          <div className="pro-card rounded-xl p-4 space-y-3">
+            <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider flex items-center gap-1.5">
+              <LineChartIcon className="w-3.5 h-3.5 text-primary" /> Evolução
+            </p>
+            <div className="h-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 14% 16%)" />
+                  <XAxis dataKey="name" tick={{ fill: "hsl(220 10% 50%)", fontSize: 9 }} />
+                  <YAxis tick={{ fill: "hsl(220 10% 50%)", fontSize: 9 }} />
+                  <Tooltip contentStyle={{ backgroundColor: "hsl(220 18% 10%)", border: "1px solid hsl(220 14% 18%)", borderRadius: 8, color: "hsl(0 0% 95%)", fontSize: 11 }} />
+                  <Line type="monotone" dataKey="receita" stroke="hsl(43 90% 50%)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="despesas" stroke="hsl(0 72% 51%)" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Per barber */}
+      <div className="pro-card rounded-xl p-4 space-y-3">
+        <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider flex items-center gap-1.5">
+          <Users className="w-3.5 h-3.5 text-primary" /> Por Barbeiro
+        </p>
+        {barberBreakdown.map((b) => (
+          <div key={b.id} className="bg-secondary/40 rounded-lg p-3 flex items-center justify-between">
+            <div>
+              <span className="text-foreground font-semibold text-sm">{b.name}</span>
+              <p className="text-[10px] text-muted-foreground">{b.cuts} atendimentos</p>
+            </div>
+            <span className="text-[hsl(142,71%,45%)] font-bold text-sm">R$ {b.totalRev.toFixed(2)}</span>
           </div>
         ))}
       </div>
 
       {/* Add expense */}
-      <div className="glass-card rounded-xl p-4 space-y-3">
-        <p className="font-display font-semibold text-foreground text-sm">Adicionar Despesa</p>
+      <div className="pro-card rounded-xl p-4 space-y-3">
+        <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider">Nova Despesa</p>
         <div className="space-y-2">
-          <select value={newExpCategory} onChange={(e) => setNewExpCategory(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border">
+          <select value={newExpCategory} onChange={(e) => setNewExpCategory(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border">
             <option value="aluguel">Aluguel</option><option value="produtos">Produtos</option><option value="agua">Água</option><option value="luz">Luz</option><option value="outros">Outros</option>
           </select>
-          <input type="text" placeholder="Descrição" value={newExpDesc} onChange={(e) => setNewExpDesc(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+          <input type="text" placeholder="Descrição" value={newExpDesc} onChange={(e) => setNewExpDesc(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
           <div className="flex gap-2">
-            <input type="number" placeholder="Valor (R$)" value={newExpAmount} onChange={(e) => setNewExpAmount(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-            <input type="date" value={newExpDate} onChange={(e) => setNewExpDate(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border" />
+            <input type="number" placeholder="Valor (R$)" value={newExpAmount} onChange={(e) => setNewExpAmount(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+            <input type="date" value={newExpDate} onChange={(e) => setNewExpDate(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border" />
           </div>
-          <button onClick={addExpense} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"><Plus className="w-4 h-4 inline mr-1" />Adicionar</button>
+          <button onClick={addExpense} className="w-full py-2.5 rounded-lg gold-gradient text-primary-foreground text-sm font-bold shadow-md hover:opacity-90 transition-all">
+            <Plus className="w-4 h-4 inline mr-1" />Adicionar
+          </button>
         </div>
       </div>
 
       {/* Expense list */}
-      <div className="glass-card rounded-xl p-4 space-y-3">
-        <p className="font-display font-semibold text-foreground text-sm">Despesas: <span className="text-red-400">R$ {totalExpenses.toFixed(2)}</span></p>
-        <div className="space-y-2 max-h-64 overflow-y-auto">
+      <div className="pro-card rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider">Despesas</p>
+          <span className="text-destructive font-bold text-xs">R$ {totalExpenses.toFixed(2)}</span>
+        </div>
+        <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-hide">
           {filteredExpenses.map((e) => (
-            <div key={e.id} className="bg-secondary/50 rounded-lg px-3 py-2.5 space-y-2">
+            <div key={e.id} className="bg-secondary/40 rounded-lg px-3 py-2.5">
               {editingExpense === e.id ? (
                 <div className="space-y-2 animate-fade-in">
                   <select value={editCategory} onChange={(ev) => setEditCategory(ev.target.value)} className="w-full px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border">
@@ -250,13 +254,13 @@ const FinancialTab = ({ appointments, barbers, expenses, setExpenses }: Props) =
                 <div className="flex items-center justify-between">
                   <div className="text-xs">
                     <span className="capitalize text-foreground font-medium">{e.category}</span>
-                    {e.description && <span className="text-muted-foreground"> - {e.description}</span>}
-                    <p className="text-muted-foreground/70">{format(parseISO(e.expense_date), "dd/MM/yyyy")}</p>
+                    {e.description && <span className="text-muted-foreground"> — {e.description}</span>}
+                    <p className="text-muted-foreground/60 text-[10px]">{format(parseISO(e.expense_date), "dd/MM/yyyy")}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-red-400 font-semibold text-xs">R$ {e.amount.toFixed(2)}</span>
-                    <button onClick={() => { setEditingExpense(e.id); setEditCategory(e.category); setEditDesc(e.description || ""); setEditAmount(String(e.amount)); setEditDate(e.expense_date); }} className="p-1 rounded hover:bg-secondary"><Edit2 className="w-3.5 h-3.5 text-muted-foreground" /></button>
-                    <button onClick={() => deleteExpense(e.id)} className="p-1 rounded hover:bg-secondary"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                    <span className="text-destructive font-bold text-xs">R$ {e.amount.toFixed(2)}</span>
+                    <button onClick={() => { setEditingExpense(e.id); setEditCategory(e.category); setEditDesc(e.description || ""); setEditAmount(String(e.amount)); setEditDate(e.expense_date); }} className="p-1 rounded hover:bg-secondary"><Edit2 className="w-3 h-3 text-muted-foreground" /></button>
+                    <button onClick={() => deleteExpense(e.id)} className="p-1 rounded hover:bg-secondary"><Trash2 className="w-3 h-3 text-destructive" /></button>
                   </div>
                 </div>
               )}
