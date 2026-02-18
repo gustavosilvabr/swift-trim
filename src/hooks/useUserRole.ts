@@ -10,7 +10,11 @@ interface RoleState {
 }
 
 export function useUserRole() {
-  const [state, setState] = useState<RoleState>({ role: null, barberId: null, loading: true });
+  const [state, setState] = useState<RoleState>({
+    role: null,
+    barberId: null,
+    loading: true,
+  });
 
   useEffect(() => {
     const fetchRole = async () => {
@@ -20,12 +24,15 @@ export function useUserRole() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("manage-barber-user", {
-        body: { action: "get_role" },
-      });
+      // pega role direto do banco
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role, barber_id")
+        .eq("user_id", session.user.id)
+        .single();
 
       if (error) {
-        console.error("Error fetching role:", error);
+        console.error("Role error:", error);
         setState({ role: null, barberId: null, loading: false });
         return;
       }
