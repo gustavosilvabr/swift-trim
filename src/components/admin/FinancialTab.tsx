@@ -22,9 +22,10 @@ interface Props {
   barbers: { id: string; name: string }[];
   expenses: Expense[];
   setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
+  hideExpenseManagement?: boolean;
 }
 
-const FinancialTab = ({ appointments, barbers, expenses, setExpenses }: Props) => {
+const FinancialTab = ({ appointments, barbers, expenses, setExpenses, hideExpenseManagement }: Props) => {
   const [dateFilter, setDateFilter] = useState<DateFilter>("month");
   const [customStart, setCustomStart] = useState(format(new Date(), "yyyy-MM-dd"));
   const [customEnd, setCustomEnd] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -209,66 +210,70 @@ const FinancialTab = ({ appointments, barbers, expenses, setExpenses }: Props) =
       </div>
 
       {/* Add expense */}
-      <div className="pro-card rounded-xl p-4 space-y-3">
-        <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider">Nova Despesa</p>
-        <div className="space-y-2">
-          <select value={newExpCategory} onChange={(e) => setNewExpCategory(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border">
-            <option value="aluguel">Aluguel</option><option value="produtos">Produtos</option><option value="agua">Água</option><option value="luz">Luz</option><option value="outros">Outros</option>
-          </select>
-          <input type="text" placeholder="Descrição" value={newExpDesc} onChange={(e) => setNewExpDesc(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-          <div className="flex gap-2">
-            <input type="number" placeholder="Valor (R$)" value={newExpAmount} onChange={(e) => setNewExpAmount(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-            <input type="date" value={newExpDate} onChange={(e) => setNewExpDate(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border" />
+      {!hideExpenseManagement && (
+        <div className="pro-card rounded-xl p-4 space-y-3">
+          <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider">Nova Despesa</p>
+          <div className="space-y-2">
+            <select value={newExpCategory} onChange={(e) => setNewExpCategory(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border">
+              <option value="aluguel">Aluguel</option><option value="produtos">Produtos</option><option value="agua">Água</option><option value="luz">Luz</option><option value="outros">Outros</option>
+            </select>
+            <input type="text" placeholder="Descrição" value={newExpDesc} onChange={(e) => setNewExpDesc(e.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+            <div className="flex gap-2">
+              <input type="number" placeholder="Valor (R$)" value={newExpAmount} onChange={(e) => setNewExpAmount(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+              <input type="date" value={newExpDate} onChange={(e) => setNewExpDate(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg bg-secondary text-foreground text-sm border border-border" />
+            </div>
+            <button onClick={addExpense} className="w-full py-2.5 rounded-lg gold-gradient text-primary-foreground text-sm font-bold shadow-md hover:opacity-90 transition-all">
+              <Plus className="w-4 h-4 inline mr-1" />Adicionar
+            </button>
           </div>
-          <button onClick={addExpense} className="w-full py-2.5 rounded-lg gold-gradient text-primary-foreground text-sm font-bold shadow-md hover:opacity-90 transition-all">
-            <Plus className="w-4 h-4 inline mr-1" />Adicionar
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Expense list */}
-      <div className="pro-card rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider">Despesas</p>
-          <span className="text-destructive font-bold text-xs">R$ {totalExpenses.toFixed(2)}</span>
+      {!hideExpenseManagement && (
+        <div className="pro-card rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="font-display font-bold text-foreground text-xs uppercase tracking-wider">Despesas</p>
+            <span className="text-destructive font-bold text-xs">R$ {totalExpenses.toFixed(2)}</span>
+          </div>
+          <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-hide">
+            {filteredExpenses.map((e) => (
+              <div key={e.id} className="bg-secondary/40 rounded-lg px-3 py-2.5">
+                {editingExpense === e.id ? (
+                  <div className="space-y-2 animate-fade-in">
+                    <select value={editCategory} onChange={(ev) => setEditCategory(ev.target.value)} className="w-full px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border">
+                      <option value="aluguel">Aluguel</option><option value="produtos">Produtos</option><option value="agua">Água</option><option value="luz">Luz</option><option value="outros">Outros</option>
+                    </select>
+                    <input type="text" value={editDesc} onChange={(ev) => setEditDesc(ev.target.value)} placeholder="Descrição" className="w-full px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border outline-none" />
+                    <div className="flex gap-2">
+                      <input type="number" value={editAmount} onChange={(ev) => setEditAmount(ev.target.value)} className="flex-1 px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border outline-none" />
+                      <input type="date" value={editDate} onChange={(ev) => setEditDate(ev.target.value)} className="flex-1 px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => saveEditExpense(e.id)} className="flex-1 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold">Salvar</button>
+                      <button onClick={() => setEditingExpense(null)} className="flex-1 py-1.5 rounded-lg bg-secondary text-muted-foreground text-xs">Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs">
+                      <span className="capitalize text-foreground font-medium">{e.category}</span>
+                      {e.description && <span className="text-muted-foreground"> — {e.description}</span>}
+                      <p className="text-muted-foreground/60 text-[10px]">{format(parseISO(e.expense_date), "dd/MM/yyyy")}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-destructive font-bold text-xs">R$ {e.amount.toFixed(2)}</span>
+                      <button onClick={() => { setEditingExpense(e.id); setEditCategory(e.category); setEditDesc(e.description || ""); setEditAmount(String(e.amount)); setEditDate(e.expense_date); }} className="p-1 rounded hover:bg-secondary"><Edit2 className="w-3 h-3 text-muted-foreground" /></button>
+                      <button onClick={() => deleteExpense(e.id)} className="p-1 rounded hover:bg-secondary"><Trash2 className="w-3 h-3 text-destructive" /></button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {filteredExpenses.length === 0 && <p className="text-center text-muted-foreground text-xs py-4">Nenhuma despesa no período</p>}
+          </div>
         </div>
-        <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-hide">
-          {filteredExpenses.map((e) => (
-            <div key={e.id} className="bg-secondary/40 rounded-lg px-3 py-2.5">
-              {editingExpense === e.id ? (
-                <div className="space-y-2 animate-fade-in">
-                  <select value={editCategory} onChange={(ev) => setEditCategory(ev.target.value)} className="w-full px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border">
-                    <option value="aluguel">Aluguel</option><option value="produtos">Produtos</option><option value="agua">Água</option><option value="luz">Luz</option><option value="outros">Outros</option>
-                  </select>
-                  <input type="text" value={editDesc} onChange={(ev) => setEditDesc(ev.target.value)} placeholder="Descrição" className="w-full px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border outline-none" />
-                  <div className="flex gap-2">
-                    <input type="number" value={editAmount} onChange={(ev) => setEditAmount(ev.target.value)} className="flex-1 px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border outline-none" />
-                    <input type="date" value={editDate} onChange={(ev) => setEditDate(ev.target.value)} className="flex-1 px-2 py-1.5 rounded-lg bg-background text-foreground text-xs border border-border" />
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => saveEditExpense(e.id)} className="flex-1 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold">Salvar</button>
-                    <button onClick={() => setEditingExpense(null)} className="flex-1 py-1.5 rounded-lg bg-secondary text-muted-foreground text-xs">Cancelar</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <div className="text-xs">
-                    <span className="capitalize text-foreground font-medium">{e.category}</span>
-                    {e.description && <span className="text-muted-foreground"> — {e.description}</span>}
-                    <p className="text-muted-foreground/60 text-[10px]">{format(parseISO(e.expense_date), "dd/MM/yyyy")}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-destructive font-bold text-xs">R$ {e.amount.toFixed(2)}</span>
-                    <button onClick={() => { setEditingExpense(e.id); setEditCategory(e.category); setEditDesc(e.description || ""); setEditAmount(String(e.amount)); setEditDate(e.expense_date); }} className="p-1 rounded hover:bg-secondary"><Edit2 className="w-3 h-3 text-muted-foreground" /></button>
-                    <button onClick={() => deleteExpense(e.id)} className="p-1 rounded hover:bg-secondary"><Trash2 className="w-3 h-3 text-destructive" /></button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-          {filteredExpenses.length === 0 && <p className="text-center text-muted-foreground text-xs py-4">Nenhuma despesa no período</p>}
-        </div>
-      </div>
+      )}
     </div>
   );
 };
