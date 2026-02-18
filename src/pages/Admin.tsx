@@ -2,19 +2,21 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAppointments, useBarbers, Appointment } from "@/hooks/useSupabase";
+import { useUserRole } from "@/hooks/useUserRole";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   LogOut, Check, X, Trash2, Edit2, ArrowLeft,
   User, Phone, DollarSign, Image, Settings, Clock,
   Upload, Plus, Eye, MessageCircle, Users, Scissors,
-  LayoutDashboard, CalendarDays
+  LayoutDashboard, CalendarDays, Shield
 } from "lucide-react";
 import { toast } from "sonner";
 import FinancialTab from "@/components/admin/FinancialTab";
 import WorkingHoursManager from "@/components/admin/WorkingHoursManager";
 import ServicesManager from "@/components/admin/ServicesManager";
 import UpcomingAppointments from "@/components/admin/UpcomingAppointments";
+import UserManagement from "@/components/admin/UserManagement";
 
 type Session = Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"];
 
@@ -24,7 +26,7 @@ const statusColors: Record<string, string> = {
   cancelado: "bg-destructive/15 text-destructive border border-destructive/20",
 };
 
-type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "hours" | "services" | "settings";
+type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "hours" | "services" | "settings" | "users";
 
 interface Expense {
   id: string;
@@ -44,6 +46,7 @@ const Admin = () => {
 
   const { appointments, refetch } = useAppointments();
   const { barbers } = useBarbers();
+  const { role, barberId: myBarberId, loading: roleLoading } = useUserRole();
 
   const [editingBarber, setEditingBarber] = useState<string | null>(null);
   const [barberName, setBarberName] = useState("");
@@ -249,22 +252,33 @@ const Admin = () => {
     );
   }
 
+  const isOwner = role === "owner";
+  const isBarber = role === "barber";
+
+  // Filter appointments by role
+  const filteredAppointments = isBarber && myBarberId
+    ? appointments.filter((a) => a.barber_id === myBarberId)
+    : appointments;
+
   const getBarberName = (id: string) => barbers.find((b) => b.id === id)?.name || "—";
-  const pendentes = appointments.filter((a) => a.status === "pendente");
-  const confirmados = appointments.filter((a) => a.status === "confirmado");
+  const pendentes = filteredAppointments.filter((a) => a.status === "pendente");
+  const confirmados = filteredAppointments.filter((a) => a.status === "confirmado");
   const thisMonth = format(new Date(), "yyyy-MM");
   const thisYear = format(new Date(), "yyyy");
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  const allTabs: { id: Tab; label: string; icon: React.ReactNode; ownerOnly?: boolean }[] = [
     { id: "appointments", label: "Agenda", icon: <CalendarDays className="w-4 h-4" /> },
     { id: "financial", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
-    { id: "barbers", label: "Barbeiros", icon: <User className="w-4 h-4" /> },
-    { id: "services", label: "Serviços", icon: <Scissors className="w-4 h-4" /> },
-    { id: "clients", label: "Clientes", icon: <Users className="w-4 h-4" /> },
-    { id: "hours", label: "Horários", icon: <Clock className="w-4 h-4" /> },
-    { id: "gallery", label: "Galeria", icon: <Image className="w-4 h-4" /> },
+    { id: "barbers", label: "Barbeiros", icon: <User className="w-4 h-4" />, ownerOnly: true },
+    { id: "services", label: "Serviços", icon: <Scissors className="w-4 h-4" />, ownerOnly: true },
+    { id: "clients", label: "Clientes", icon: <Users className="w-4 h-4" />, ownerOnly: true },
+    { id: "hours", label: "Horários", icon: <Clock className="w-4 h-4" />, ownerOnly: true },
+    { id: "gallery", label: "Galeria", icon: <Image className="w-4 h-4" />, ownerOnly: true },
+    { id: "users", label: "Acessos", icon: <Shield className="w-4 h-4" />, ownerOnly: true },
     { id: "settings", label: "Config", icon: <Settings className="w-4 h-4" /> },
   ];
+
+  const tabs = allTabs.filter((t) => !t.ownerOnly || isOwner);
 
   return (
     <div className="min-h-screen bg-background">
@@ -276,6 +290,7 @@ const Admin = () => {
               <LayoutDashboard className="w-4 h-4 text-primary-foreground" />
             </div>
             <h1 className="font-display text-base font-bold text-foreground">Dashboard</h1>
+            {role && <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${isOwner ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>{role}</span>}
           </div>
           <button onClick={handleLogout} className="p-2 rounded-lg hover:bg-secondary transition-colors">
             <LogOut className="w-4 h-4 text-muted-foreground" />
@@ -295,13 +310,13 @@ const Admin = () => {
             <p className="text-[10px] text-muted-foreground font-medium">Confirmados</p>
           </div>
           <div className="stat-card rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-primary">{appointments.length}</p>
+            <p className="text-xl font-bold text-primary">{filteredAppointments.length}</p>
             <p className="text-[10px] text-muted-foreground font-medium">Total</p>
           </div>
         </div>
 
         {/* Upcoming */}
-        <UpcomingAppointments appointments={appointments} barbers={barbers} />
+        <UpcomingAppointments appointments={filteredAppointments} barbers={barbers} />
 
         {/* Tabs */}
         <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
@@ -320,8 +335,8 @@ const Admin = () => {
         {/* APPOINTMENTS */}
         {activeTab === "appointments" && (
           <div className="space-y-2">
-            {appointments.length === 0 && <p className="text-center text-muted-foreground py-8 text-sm">Nenhum agendamento</p>}
-            {appointments.map((a) => (
+            {filteredAppointments.length === 0 && <p className="text-center text-muted-foreground py-8 text-sm">Nenhum agendamento</p>}
+            {filteredAppointments.map((a) => (
               <div key={a.id} className="pro-card rounded-xl p-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <div>
@@ -339,22 +354,26 @@ const Admin = () => {
                   <p className="text-[11px] text-primary font-medium">{(a as any).service_type} {(a as any).total_amount > 0 ? `• R$ ${Number((a as any).total_amount).toFixed(2)}` : ""}</p>
                 )}
                 <div className="flex gap-1.5 flex-wrap">
-                  {a.status === "pendente" && (
+                  {isOwner && a.status === "pendente" && (
                     <button onClick={() => updateStatus(a.id, "confirmado")} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-[hsl(142,71%,45%)]/15 text-[hsl(142,71%,45%)] hover:bg-[hsl(142,71%,45%)]/25 transition-colors font-semibold"><Check className="w-3 h-3" /> Confirmar</button>
                   )}
-                  {a.status !== "cancelado" && (
+                  {isOwner && a.status !== "cancelado" && (
                     <button onClick={() => updateStatus(a.id, "cancelado")} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors font-semibold"><X className="w-3 h-3" /> Cancelar</button>
                   )}
-                  <button onClick={() => {
-                    if (editingAppointment === a.id) { setEditingAppointment(null); return; }
-                    setEditingAppointment(a.id);
-                    setEditServiceType((a as any).service_type || "corte");
-                    setEditProducts((a as any).products_sold || "");
-                    setEditAmount(String((a as any).total_amount || ""));
-                    setEditObs((a as any).observation || "");
-                    setEditPayment((a as any).payment_method || "");
-                  }} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 transition-colors font-semibold"><Edit2 className="w-3 h-3" /> Editar</button>
-                  <button onClick={() => deleteAppointment(a.id)} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-destructive transition-colors font-semibold"><Trash2 className="w-3 h-3" /> Excluir</button>
+                  {isOwner && (
+                    <button onClick={() => {
+                      if (editingAppointment === a.id) { setEditingAppointment(null); return; }
+                      setEditingAppointment(a.id);
+                      setEditServiceType((a as any).service_type || "corte");
+                      setEditProducts((a as any).products_sold || "");
+                      setEditAmount(String((a as any).total_amount || ""));
+                      setEditObs((a as any).observation || "");
+                      setEditPayment((a as any).payment_method || "");
+                    }} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 transition-colors font-semibold"><Edit2 className="w-3 h-3" /> Editar</button>
+                  )}
+                  {isOwner && (
+                    <button onClick={() => deleteAppointment(a.id)} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-destructive transition-colors font-semibold"><Trash2 className="w-3 h-3" /> Excluir</button>
+                  )}
                 </div>
                 {editingAppointment === a.id && (
                   <div className="space-y-2 pt-3 border-t border-border animate-fade-in">
@@ -429,7 +448,7 @@ const Admin = () => {
 
         {/* FINANCIAL */}
         {activeTab === "financial" && (
-          <FinancialTab appointments={appointments} barbers={barbers} expenses={expenses} setExpenses={setExpenses} />
+          <FinancialTab appointments={filteredAppointments} barbers={isBarber && myBarberId ? barbers.filter(b => b.id === myBarberId) : barbers} expenses={isOwner ? expenses : []} setExpenses={setExpenses} hideExpenseManagement={isBarber} />
         )}
 
         {/* SERVICES */}
@@ -536,6 +555,9 @@ const Admin = () => {
             <button onClick={handleForgotPassword} className="w-full py-2.5 rounded-lg bg-secondary text-muted-foreground text-sm hover:text-foreground transition-colors font-medium">Esqueci minha senha</button>
           </div>
         )}
+
+        {/* USERS */}
+        {activeTab === "users" && isOwner && <UserManagement />}
       </main>
     </div>
   );
