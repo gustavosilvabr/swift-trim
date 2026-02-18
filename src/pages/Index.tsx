@@ -17,17 +17,8 @@ const Index = () => {
       {!loaded && <LoadingScreen onComplete={onComplete} />}
       <div className="min-h-screen bg-background flex flex-col">
         <Header />
-        <main className="max-w-lg mx-auto w-full px-4 py-6 space-y-8 pb-24 flex-1">
-          {/* Hero section */}
-          <section className="text-center space-y-2 animate-fade-in">
-            <h1 className="font-display text-2xl font-bold gold-text">Agende seu Horário</h1>
-            <p className="text-sm text-muted-foreground">Escolha o barbeiro, dia e horário ideal pra você</p>
-          </section>
-
+        <main className="max-w-lg mx-auto px-4 py-6 space-y-10 pb-24 flex-1">
           <BookingFlow />
-
-          <div className="border-t border-border" />
-
           <ReviewsCarousel />
           <GallerySection />
           <ReviewsAndMap />

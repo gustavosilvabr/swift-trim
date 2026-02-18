@@ -6,7 +6,11 @@ const StoreFacade = () => {
 
   useEffect(() => {
     const fetch = async () => {
-      const { data } = await supabase.from("site_settings").select("value").eq("key", "store_facade_url").maybeSingle();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "store_facade_url")
+        .maybeSingle();
       if (data?.value) setImageUrl(data.value);
     };
     fetch();
@@ -15,8 +19,13 @@ const StoreFacade = () => {
   if (!imageUrl) return null;
 
   return (
-    <div className="rounded-xl overflow-hidden border border-border animate-fade-in shadow-lg">
-      <img src={imageUrl} alt="Fachada da Barbearia Goldblad" className="w-full h-auto object-cover" loading="lazy" />
+    <div className="rounded-xl overflow-hidden border border-border animate-fade-in">
+      <img
+        src={imageUrl}
+        alt="Fachada da Barbearia Goldblad"
+        className="w-full h-auto object-cover"
+        loading="lazy"
+      />
     </div>
   );
 };
