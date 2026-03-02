@@ -17,7 +17,7 @@ const Index = () => {
       {!loaded && <LoadingScreen onComplete={onComplete} />}
       <div className="min-h-screen bg-background flex flex-col">
         <Header />
-        <main className="max-w-lg mx-auto px-4 py-6 space-y-10 pb-24 flex-1">
+        <main className="w-full max-w-lg mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-8 sm:space-y-10 pb-24 flex-1">
           <BookingFlow />
           <ReviewsCarousel />
           <GallerySection />

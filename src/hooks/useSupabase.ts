@@ -24,6 +24,11 @@ export interface Appointment {
   appointment_date: string;
   appointment_time: string;
   status: "pendente" | "confirmado" | "concluido" | "cancelado";
+  service_type: string | null;
+  total_amount: number | null;
+  products_sold: string | null;
+  observation: string | null;
+  payment_method: string | null;
   created_at: string;
   updated_at: string;
 }

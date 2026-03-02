@@ -1,13 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAppointments, useBarbers, Appointment } from "@/hooks/useSupabase";
-import { format } from "date-fns";
+import { format, parseISO, startOfDay, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   LogOut, Check, X, Trash2, Edit2, ArrowLeft,
   User, Phone, DollarSign, Image, Settings, Clock,
-  Upload, Plus, Eye, MessageCircle, Users, Scissors
+  Upload, Plus, MessageCircle, Users, Scissors, ChevronLeft, ChevronRight, Shield
 } from "lucide-react";
 import { toast } from "sonner";
 import FinancialTab from "@/components/admin/FinancialTab";
@@ -23,7 +23,7 @@ const statusColors: Record<string, string> = {
   cancelado: "bg-red-500/20 text-red-400",
 };
 
-type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "hours" | "services" | "settings";
+type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "hours" | "services" | "settings" | "access";
 
 interface Expense {
   id: string;
@@ -43,6 +43,10 @@ const Admin = () => {
 
   const { appointments, refetch } = useAppointments();
   const { barbers } = useBarbers();
+
+  // Role state
+  const [userRole, setUserRole] = useState<"owner" | "barber" | null>(null);
+  const [myBarberId, setMyBarberId] = useState<string | null>(null);
 
   const [editingBarber, setEditingBarber] = useState<string | null>(null);
   const [barberName, setBarberName] = useState("");
@@ -68,6 +72,15 @@ const Admin = () => {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
 
+  // Calendar date for appointments
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+
+  // Barber user management
+  const [newBarberEmail, setNewBarberEmail] = useState("");
+  const [newBarberPw, setNewBarberPw] = useState("");
+  const [selectedBarberId, setSelectedBarberId] = useState("");
+  const [barberUsers, setBarberUsers] = useState<{ user_id: string; barber_id: string | null; role: string }[]>([]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
@@ -79,6 +92,36 @@ const Admin = () => {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Fetch role
+  useEffect(() => {
+    if (!session) { setUserRole(null); setMyBarberId(null); return; }
+    const fetchRole = async () => {
+      const { data: roles } = await supabase.from("user_roles").select("role, barber_id").eq("user_id", session.user.id);
+      if (roles && roles.length > 0) {
+        const r = roles[0];
+        setUserRole(r.role as "owner" | "barber");
+        setMyBarberId(r.barber_id);
+      } else {
+        // Check if this is the original admin (owner without role entry)
+        const { data: isOwner } = await supabase.rpc("is_owner");
+        if (isOwner) {
+          setUserRole("owner");
+        }
+      }
+    };
+    fetchRole();
+  }, [session]);
+
+  // Fetch barber users for access tab
+  useEffect(() => {
+    if (!session || userRole !== "owner") return;
+    const fetchBarberUsers = async () => {
+      const { data } = await supabase.from("user_roles").select("user_id, barber_id, role");
+      if (data) setBarberUsers(data);
+    };
+    fetchBarberUsers();
+  }, [session, userRole]);
 
   useEffect(() => {
     if (!session) return;
@@ -209,11 +252,40 @@ const Admin = () => {
     setCurrentPw(""); setNewPw(""); setConfirmPw("");
   };
 
-  const handleForgotPassword = async () => {
-    const email = session?.user?.email;
-    if (!email) return;
-    await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + "/admin" });
-    toast.success("Email de redefinição enviado");
+  const handleCreateBarberUser = async () => {
+    if (!newBarberEmail.trim() || !newBarberPw || !selectedBarberId) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-barber-user", {
+        body: { action: "create", email: newBarberEmail.trim(), password: newBarberPw, barber_id: selectedBarberId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Conta de barbeiro criada!");
+      setNewBarberEmail(""); setNewBarberPw(""); setSelectedBarberId("");
+      // Refresh
+      const { data: roles } = await supabase.from("user_roles").select("user_id, barber_id, role");
+      if (roles) setBarberUsers(roles);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao criar conta");
+    }
+  };
+
+  const handleDeleteBarberUser = async (userId: string) => {
+    if (!confirm("Excluir esta conta de barbeiro?")) return;
+    try {
+      const { data, error } = await supabase.functions.invoke("manage-barber-user", {
+        body: { action: "delete", user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Conta excluída");
+      setBarberUsers((prev) => prev.filter((u) => u.user_id !== userId));
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao excluir");
+    }
   };
 
   if (loading) {
@@ -248,11 +320,23 @@ const Admin = () => {
     );
   }
 
+  const isOwner = userRole === "owner";
   const getBarberName = (id: string) => barbers.find((b) => b.id === id)?.name || "—";
-  const pendentes = appointments.filter((a) => a.status === "pendente");
-  const confirmados = appointments.filter((a) => a.status === "confirmado");
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  // Filter appointments based on role
+  const visibleAppointments = isOwner
+    ? appointments
+    : appointments.filter((a) => a.barber_id === myBarberId);
+
+  // Filter by selected date
+  const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
+  const dateFilteredAppointments = visibleAppointments.filter((a) => a.appointment_date === selectedDateStr);
+
+  const pendentes = visibleAppointments.filter((a) => a.status === "pendente");
+  const confirmados = visibleAppointments.filter((a) => a.status === "confirmado");
+
+  // Tabs based on role
+  const ownerTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "appointments", label: "Agenda", icon: <Clock className="w-4 h-4" /> },
     { id: "barbers", label: "Barbeiros", icon: <User className="w-4 h-4" /> },
     { id: "financial", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
@@ -260,60 +344,80 @@ const Admin = () => {
     { id: "clients", label: "Clientes", icon: <Users className="w-4 h-4" /> },
     { id: "hours", label: "Horários", icon: <Clock className="w-4 h-4" /> },
     { id: "gallery", label: "Galeria", icon: <Image className="w-4 h-4" /> },
+    { id: "access", label: "Acessos", icon: <Shield className="w-4 h-4" /> },
     { id: "settings", label: "Config", icon: <Settings className="w-4 h-4" /> },
   ];
+
+  const barberTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "appointments", label: "Agenda", icon: <Clock className="w-4 h-4" /> },
+    { id: "financial", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
+    { id: "settings", label: "Config", icon: <Settings className="w-4 h-4" /> },
+  ];
+
+  const tabs = isOwner ? ownerTabs : barberTabs;
 
   const thisMonth = format(new Date(), "yyyy-MM");
   const thisYear = format(new Date(), "yyyy");
 
+  // Navigate date
+  const goDate = (days: number) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d);
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 w-full py-4 px-4 bg-background/80 backdrop-blur-lg border-b border-border">
+      <header className="sticky top-0 z-40 w-full py-3 sm:py-4 px-3 sm:px-4 bg-background/80 backdrop-blur-lg border-b border-border">
         <div className="flex items-center justify-between max-w-2xl mx-auto">
-          <h1 className="font-display text-xl font-bold gold-text">Painel Admin</h1>
+          <h1 className="font-display text-lg sm:text-xl font-bold gold-text">
+            {isOwner ? "Painel Admin" : "Minha Agenda"}
+          </h1>
           <button onClick={handleLogout} className="p-2 rounded-lg hover:bg-secondary transition-colors">
             <LogOut className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6 pb-12">
+      <main className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-12">
         {/* Dashboard cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="glass-card rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-yellow-400">{pendentes.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">Pendentes</p>
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          <div className="glass-card rounded-xl p-3 sm:p-4 text-center">
+            <p className="text-xl sm:text-2xl font-bold text-yellow-400">{pendentes.length}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Pendentes</p>
           </div>
-          <div className="glass-card rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-green-400">{confirmados.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">Confirmados</p>
+          <div className="glass-card rounded-xl p-3 sm:p-4 text-center">
+            <p className="text-xl sm:text-2xl font-bold text-green-400">{confirmados.length}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Confirmados</p>
           </div>
         </div>
 
         {/* Upcoming appointments */}
-        <UpcomingAppointments appointments={appointments} barbers={barbers} />
+        <UpcomingAppointments appointments={visibleAppointments} barbers={barbers} />
 
-        {/* Per barber stats */}
-        <div className="grid grid-cols-2 gap-3">
-          {barbers.map((b) => {
-            const bApps = appointments.filter((a) => a.barber_id === b.id);
-            return (
-              <div key={b.id} className="glass-card rounded-xl p-4">
-                <p className="font-display font-semibold text-foreground mb-2">{b.name}</p>
-                <div className="space-y-1 text-xs">
-                  <p className="text-yellow-400">{bApps.filter((a) => a.status === "pendente").length} pendentes</p>
-                  <p className="text-green-400">{bApps.filter((a) => a.status === "confirmado").length} confirmados</p>
+        {/* Per barber stats - only for owner */}
+        {isOwner && (
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            {barbers.map((b) => {
+              const bApps = appointments.filter((a) => a.barber_id === b.id);
+              return (
+                <div key={b.id} className="glass-card rounded-xl p-3 sm:p-4">
+                  <p className="font-display font-semibold text-foreground text-sm mb-2">{b.name}</p>
+                  <div className="space-y-1 text-xs">
+                    <p className="text-yellow-400">{bApps.filter((a) => a.status === "pendente").length} pendentes</p>
+                    <p className="text-green-400">{bApps.filter((a) => a.status === "confirmado").length} confirmados</p>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${activeTab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
+              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-all whitespace-nowrap ${activeTab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -322,44 +426,77 @@ const Admin = () => {
         {/* APPOINTMENTS TAB */}
         {activeTab === "appointments" && (
           <div className="space-y-3">
-            {appointments.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhum agendamento</p>}
-            {appointments.map((a) => (
-              <div key={a.id} className="glass-card rounded-xl p-4 space-y-3">
+            {/* Date navigator */}
+            <div className="glass-card rounded-xl p-3 flex items-center justify-between">
+              <button onClick={() => goDate(-1)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+                <ChevronLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="text-center">
+                <p className="font-display font-semibold text-foreground text-sm">
+                  {isSameDay(selectedDate, new Date()) ? "Hoje" : format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+                </p>
+                <p className="text-[10px] text-muted-foreground">{format(selectedDate, "EEEE", { locale: ptBR })}</p>
+              </div>
+              <button onClick={() => goDate(1)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+                <ChevronRight className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
+
+            {/* Quick date buttons */}
+            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+              {[-2, -1, 0, 1, 2, 3, 4, 5, 6].map((offset) => {
+                const d = new Date();
+                d.setDate(d.getDate() + offset);
+                const isActive = isSameDay(d, selectedDate);
+                return (
+                  <button key={offset} onClick={() => setSelectedDate(d)}
+                    className={`flex flex-col items-center px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap min-w-[48px] ${isActive ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
+                    <span className="text-[10px]">{format(d, "EEE", { locale: ptBR })}</span>
+                    <span className="font-bold">{format(d, "dd")}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {dateFilteredAppointments.length === 0 && <p className="text-center text-muted-foreground py-8 text-sm">Nenhum agendamento para esta data</p>}
+            {dateFilteredAppointments.map((a) => (
+              <div key={a.id} className="glass-card rounded-xl p-3 sm:p-4 space-y-2 sm:space-y-3">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-foreground">{a.client_name}</p>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" /> {a.client_phone}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-foreground text-sm truncate">{a.client_name}</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3 flex-shrink-0" /> {a.client_phone}</p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColors[a.status] || "bg-secondary text-muted-foreground"}`}>{a.status}</span>
+                  <span className={`text-[10px] sm:text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${statusColors[a.status] || "bg-secondary text-muted-foreground"}`}>{a.status}</span>
                 </div>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground flex-wrap">
                   <span>{getBarberName(a.barber_id)}</span>
-                  <span>{format(new Date(a.appointment_date + "T00:00:00"), "dd/MM", { locale: ptBR })}</span>
                   <span>{a.appointment_time.substring(0, 5)}</span>
                 </div>
-                {(a as any).service_type && (
-                  <p className="text-xs text-primary">{(a as any).service_type} {(a as any).total_amount > 0 ? `• R$ ${Number((a as any).total_amount).toFixed(2)}` : ""}</p>
+                {a.service_type && (
+                  <p className="text-xs text-primary">{a.service_type} {(a.total_amount ?? 0) > 0 ? `• R$ ${Number(a.total_amount).toFixed(2)}` : ""}</p>
                 )}
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-1.5 sm:gap-2 flex-wrap">
                   {a.status === "pendente" && (
-                    <button onClick={() => updateStatus(a.id, "confirmado")} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"><Check className="w-3 h-3" /> Confirmar</button>
+                    <button onClick={() => updateStatus(a.id, "confirmado")} className="flex items-center gap-1 text-[10px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"><Check className="w-3 h-3" /> Confirmar</button>
                   )}
                   {a.status !== "cancelado" && (
-                    <button onClick={() => updateStatus(a.id, "cancelado")} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"><X className="w-3 h-3" /> Cancelar</button>
+                    <button onClick={() => updateStatus(a.id, "cancelado")} className="flex items-center gap-1 text-[10px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"><X className="w-3 h-3" /> Cancelar</button>
                   )}
                   <button onClick={() => {
                     if (editingAppointment === a.id) { setEditingAppointment(null); return; }
                     setEditingAppointment(a.id);
-                    setEditServiceType((a as any).service_type || "corte");
-                    setEditProducts((a as any).products_sold || "");
-                    setEditAmount(String((a as any).total_amount || ""));
-                    setEditObs((a as any).observation || "");
-                    setEditPayment((a as any).payment_method || "");
-                  }} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"><Edit2 className="w-3 h-3" /> Editar</button>
-                  <button onClick={() => deleteAppointment(a.id)} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-3 h-3" /> Excluir</button>
+                    setEditServiceType(a.service_type || "corte");
+                    setEditProducts(a.products_sold || "");
+                    setEditAmount(String(a.total_amount || ""));
+                    setEditObs(a.observation || "");
+                    setEditPayment(a.payment_method || "");
+                  }} className="flex items-center gap-1 text-[10px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"><Edit2 className="w-3 h-3" /> Editar</button>
+                  {isOwner && (
+                    <button onClick={() => deleteAppointment(a.id)} className="flex items-center gap-1 text-[10px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-3 h-3" /> Excluir</button>
+                  )}
                 </div>
                 {editingAppointment === a.id && (
-                  <div className="space-y-3 pt-2 border-t border-border animate-fade-in">
+                  <div className="space-y-2 sm:space-y-3 pt-2 border-t border-border animate-fade-in">
                     <input type="text" placeholder="Tipo de serviço" value={editServiceType} onChange={(e) => setEditServiceType(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
                     <input type="text" placeholder="Produtos vendidos" value={editProducts} onChange={(e) => setEditProducts(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
                     <input type="number" placeholder="Valor total (R$)" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
@@ -378,23 +515,22 @@ const Admin = () => {
           </div>
         )}
 
-        {/* BARBERS TAB */}
-        {activeTab === "barbers" && (
+        {/* BARBERS TAB - owner only */}
+        {activeTab === "barbers" && isOwner && (
           <div className="space-y-4">
             <div className="glass-card rounded-xl p-4 space-y-3">
               <p className="font-display font-semibold text-foreground">Foto da Fachada</p>
               <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFacadeUpload(f); }} className="text-sm text-muted-foreground" />
             </div>
             {barbers.map((b) => (
-              <div key={b.id} className="glass-card rounded-xl p-4 space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-border flex-shrink-0">
-                    {b.photo_url ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-secondary flex items-center justify-center"><User className="w-6 h-6 text-muted-foreground" /></div>}
+              <div key={b.id} className="glass-card rounded-xl p-3 sm:p-4 space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-border flex-shrink-0">
+                    {b.photo_url ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-secondary flex items-center justify-center"><User className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground" /></div>}
                   </div>
-                  <div className="flex-1">
-                    <p className="font-display font-semibold text-foreground">{b.name}</p>
-                    <p className="text-sm text-muted-foreground">{b.phone}</p>
-                    {(b as any).specialty && <p className="text-xs text-primary">{(b as any).specialty}</p>}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-display font-semibold text-foreground text-sm">{b.name}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{b.phone}</p>
                   </div>
                   <button onClick={() => {
                     setEditingBarber(editingBarber === b.id ? null : b.id);
@@ -426,19 +562,25 @@ const Admin = () => {
 
         {/* FINANCIAL TAB */}
         {activeTab === "financial" && (
-          <FinancialTab appointments={appointments} barbers={barbers} expenses={expenses} setExpenses={setExpenses} />
+          <FinancialTab
+            appointments={isOwner ? appointments : visibleAppointments}
+            barbers={isOwner ? barbers : barbers.filter((b) => b.id === myBarberId)}
+            expenses={expenses}
+            setExpenses={setExpenses}
+            isOwner={isOwner}
+          />
         )}
 
-        {/* SERVICES TAB */}
-        {activeTab === "services" && <ServicesManager />}
+        {/* SERVICES TAB - owner only */}
+        {activeTab === "services" && isOwner && <ServicesManager />}
 
-        {/* CLIENTS TAB */}
-        {activeTab === "clients" && (
+        {/* CLIENTS TAB - owner only */}
+        {activeTab === "clients" && isOwner && (
           <div className="space-y-3">
-            <p className="font-display font-semibold text-foreground text-lg">Histórico de Clientes</p>
+            <p className="font-display font-semibold text-foreground text-base sm:text-lg">Histórico de Clientes</p>
             {(() => {
               const clientMap = new Map<string, { name: string; phone: string; cuts: typeof appointments; lastCut: string | null }>();
-              appointments.filter((a) => a.status === "confirmado" || a.status === "concluido").forEach((a) => {
+              appointments.filter((a) => a.status === "confirmado").forEach((a) => {
                 const key = a.client_phone;
                 if (!clientMap.has(key)) clientMap.set(key, { name: a.client_name, phone: a.client_phone, cuts: [], lastCut: null });
                 const c = clientMap.get(key)!;
@@ -458,26 +600,26 @@ const Admin = () => {
                     const waLink = `https://wa.me/${c.phone.replace(/\D/g, "")}?text=${waMsg}`;
 
                     return (
-                      <div key={c.phone} className="glass-card rounded-xl p-4 space-y-2">
+                      <div key={c.phone} className="glass-card rounded-xl p-3 sm:p-4 space-y-2">
                         <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-foreground">{c.name}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-foreground text-sm truncate">{c.name}</p>
                             <p className="text-xs text-muted-foreground">{c.phone}</p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <span className={`text-xs font-bold ${statusColor}`}>{daysSinceCut}d</span>
                             <a href={waLink} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30">
                               <MessageCircle className="w-4 h-4" />
                             </a>
                           </div>
                         </div>
-                        <div className="grid grid-cols-4 gap-2 text-xs text-center">
+                        <div className="grid grid-cols-4 gap-1 sm:gap-2 text-[10px] sm:text-xs text-center">
                           <div><p className="text-muted-foreground">Mês</p><p className="font-bold text-foreground">{thisMonthCuts}</p></div>
                           <div><p className="text-muted-foreground">Ano</p><p className="font-bold text-foreground">{thisYearCuts}</p></div>
                           <div><p className="text-muted-foreground">Total</p><p className="font-bold text-foreground">{c.cuts.length}</p></div>
                           <div><p className="text-muted-foreground">Barbeiro</p><p className="font-bold text-foreground truncate">{lastBarber}</p></div>
                         </div>
-                        {c.lastCut && <p className="text-xs text-muted-foreground">Último: {format(new Date(c.lastCut + "T00:00:00"), "dd/MM/yyyy")}</p>}
+                        {c.lastCut && <p className="text-[10px] sm:text-xs text-muted-foreground">Último: {format(new Date(c.lastCut + "T00:00:00"), "dd/MM/yyyy")}</p>}
                       </div>
                     );
                   })}
@@ -488,17 +630,17 @@ const Admin = () => {
           </div>
         )}
 
-        {/* WORKING HOURS TAB */}
-        {activeTab === "hours" && <WorkingHoursManager barbers={barbers} />}
+        {/* WORKING HOURS TAB - owner only */}
+        {activeTab === "hours" && isOwner && <WorkingHoursManager barbers={barbers} />}
 
-        {/* GALLERY TAB */}
-        {activeTab === "gallery" && (
+        {/* GALLERY TAB - owner only */}
+        {activeTab === "gallery" && isOwner && (
           <div className="space-y-4">
             <div className="glass-card rounded-xl p-4 space-y-3">
               <p className="font-display font-semibold text-foreground">Upload de Imagens</p>
               <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleGalleryUpload(f); }} className="text-sm text-muted-foreground" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {galleryImages.map((img) => (
                 <div key={img.id} className="relative rounded-xl overflow-hidden border border-border group">
                   <img src={img.image_url} alt={img.title} className="w-full aspect-square object-cover" />
@@ -511,9 +653,57 @@ const Admin = () => {
           </div>
         )}
 
+        {/* ACCESS TAB - owner only */}
+        {activeTab === "access" && isOwner && (
+          <div className="space-y-5">
+            <div className="glass-card rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-primary" />
+                <p className="font-display font-semibold text-foreground text-sm">Criar Conta de Barbeiro</p>
+              </div>
+              <select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border">
+                <option value="">Selecione o barbeiro</option>
+                {barbers.filter((b) => !barberUsers.some((u) => u.barber_id === b.id)).map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              <input type="email" placeholder="Email do barbeiro" value={newBarberEmail} onChange={(e) => setNewBarberEmail(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+              <input type="password" placeholder="Senha" value={newBarberPw} onChange={(e) => setNewBarberPw(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+              <button onClick={handleCreateBarberUser} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">
+                <Plus className="w-4 h-4 inline mr-1" />Criar Conta
+              </button>
+            </div>
+
+            {/* Existing barber accounts */}
+            <div className="space-y-2">
+              <p className="font-display font-semibold text-foreground text-sm">Contas Ativas</p>
+              {barberUsers.filter((u) => u.role === "barber").map((u) => {
+                const barber = barbers.find((b) => b.id === u.barber_id);
+                return (
+                  <div key={u.user_id} className="glass-card rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-foreground text-sm">{barber?.name || "Barbeiro"}</p>
+                      <p className="text-xs text-muted-foreground">Papel: Barbeiro</p>
+                    </div>
+                    <button onClick={() => handleDeleteBarberUser(u.user_id)} className="p-2 rounded-lg hover:bg-secondary text-red-400">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+              {barberUsers.filter((u) => u.role === "barber").length === 0 && (
+                <p className="text-center text-muted-foreground text-xs py-4">Nenhuma conta de barbeiro criada</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* SETTINGS TAB */}
         {activeTab === "settings" && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="glass-card rounded-xl p-4 space-y-3">
               <p className="font-display font-semibold text-foreground">Alterar Email</p>
               <input type="email" placeholder="Novo email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
@@ -522,11 +712,10 @@ const Admin = () => {
             <div className="glass-card rounded-xl p-4 space-y-3">
               <p className="font-display font-semibold text-foreground">Alterar Senha</p>
               <input type="password" placeholder="Senha atual" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-              <input type="password" placeholder="Nova senha" value={newPw} onChange={(e) => setNewPw(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+              <input type="password" placeholder="Nova senha (mínimo 6 caracteres)" value={newPw} onChange={(e) => setNewPw(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
               <input type="password" placeholder="Confirmar nova senha" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
               <button onClick={handleChangePassword} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Alterar Senha</button>
             </div>
-            <button onClick={handleForgotPassword} className="w-full py-2 rounded-lg bg-secondary text-muted-foreground text-sm hover:text-foreground transition-colors">Esqueci minha senha</button>
           </div>
         )}
       </main>
