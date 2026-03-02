@@ -83,6 +83,7 @@ export type Database = {
           phone: string
           photo_url: string | null
           specialty: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -93,6 +94,7 @@ export type Database = {
           phone: string
           photo_url?: string | null
           specialty?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -103,6 +105,7 @@ export type Database = {
           phone?: string
           photo_url?: string | null
           specialty?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -305,6 +308,30 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          barber_id: string | null
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          barber_id?: string | null
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          barber_id?: string | null
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_config: {
         Row: {
           days_threshold: number | null
@@ -334,9 +361,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_my_barber_id: { Args: never; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_owner: { Args: never; Returns: boolean }
     }
     Enums: {
+      app_role: "owner" | "barber"
       appointment_status: "pendente" | "confirmado" | "concluido" | "cancelado"
     }
     CompositeTypes: {
@@ -465,6 +501,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["owner", "barber"],
       appointment_status: ["pendente", "confirmado", "concluido", "cancelado"],
     },
   },

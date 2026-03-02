@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 import { TimeSlot, BlockedSlot, Appointment } from "@/hooks/useSupabase";
 
 interface TimeSlotsGridProps {
@@ -13,6 +13,7 @@ interface TimeSlotsGridProps {
 
 const TimeSlotsGrid = ({ slots, blockedSlots, appointments, selectedDate, selectedTime, onSelectTime }: TimeSlotsGridProps) => {
   const dateStr = format(selectedDate, "yyyy-MM-dd");
+  const todaySelected = isToday(selectedDate);
 
   const unavailableTimes = useMemo(() => {
     const blocked = blockedSlots
@@ -23,8 +24,21 @@ const TimeSlotsGrid = ({ slots, blockedSlots, appointments, selectedDate, select
       .filter((a) => a.appointment_date === dateStr && a.status !== "cancelado")
       .map((a) => a.appointment_time);
 
-    return new Set([...blocked, ...booked]);
-  }, [blockedSlots, appointments, dateStr]);
+    // If today, also block past times
+    const pastTimes: string[] = [];
+    if (todaySelected) {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      slots.forEach((slot) => {
+        const [h, m] = slot.slot_time.split(":").map(Number);
+        if (h * 60 + m <= currentMinutes) {
+          pastTimes.push(slot.slot_time);
+        }
+      });
+    }
+
+    return new Set([...blocked, ...booked, ...pastTimes]);
+  }, [blockedSlots, appointments, dateStr, todaySelected, slots]);
 
   if (slots.length === 0) {
     return (
