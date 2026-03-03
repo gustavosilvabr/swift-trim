@@ -21,19 +21,16 @@ function err(message: string, status = 400) {
   return json({ error: message }, status);
 }
 
-/** Creates a supabase client scoped to the calling user */
 function userClient(authHeader: string) {
   return createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
   });
 }
 
-/** Admin client with service role */
 function adminClient() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
-/** Extracts user from auth header, returns null if not authenticated */
 async function getUser(authHeader: string | null) {
   if (!authHeader) return null;
   const client = userClient(authHeader);
@@ -41,7 +38,6 @@ async function getUser(authHeader: string | null) {
   return user;
 }
 
-/** Gets the user's role */
 async function getUserRole(userId: string) {
   const admin = adminClient();
   const { data } = await admin
@@ -52,13 +48,63 @@ async function getUserRole(userId: string) {
   return data;
 }
 
+/** Send push notifications via Expo Push API */
+async function sendPushNotifications(tokens: string[], title: string, body: string, data?: Record<string, unknown>) {
+  const messages = tokens.map((token) => ({
+    to: token,
+    sound: "default",
+    title,
+    body,
+    data: data || {},
+  }));
+
+  try {
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(messages),
+    });
+  } catch (e) {
+    console.error("Push notification error:", e);
+  }
+}
+
+/** Notify all barbers (or specific barber) about a new appointment */
+async function notifyNewAppointment(barberId: string, clientName: string, date: string, time: string) {
+  const admin = adminClient();
+
+  // Get barber name
+  const { data: barber } = await admin.from("barbers").select("name, user_id").eq("id", barberId).single();
+
+  // Get push tokens for the specific barber + all owners
+  const { data: ownerRoles } = await admin.from("user_roles").select("user_id").eq("role", "owner");
+  const userIds = (ownerRoles || []).map((r) => r.user_id);
+  if (barber?.user_id) userIds.push(barber.user_id);
+
+  if (userIds.length === 0) return;
+
+  const { data: tokenRows } = await admin
+    .from("push_tokens")
+    .select("token")
+    .in("user_id", [...new Set(userIds)]);
+
+  const tokens = (tokenRows || []).map((t) => t.token);
+  if (tokens.length === 0) return;
+
+  await sendPushNotifications(
+    tokens,
+    "📅 Novo Agendamento!",
+    `${clientName} agendou com ${barber?.name || "barbeiro"} em ${date} às ${time}`,
+    { type: "new_appointment", barber_id: barberId }
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   const url = new URL(req.url);
-  // Path after /barbershop-api/
   const pathParts = url.pathname.replace(/^\/barbershop-api\/?/, "").split("/").filter(Boolean);
   const resource = pathParts[0] || "";
   const subResource = pathParts[1] || "";
@@ -67,7 +113,7 @@ Deno.serve(async (req) => {
 
   try {
     // ═══════════════════════════════════════════
-    // PUBLIC ENDPOINTS (no auth required)
+    // PUBLIC ENDPOINTS
     // ═══════════════════════════════════════════
 
     // POST /auth/login
@@ -104,21 +150,21 @@ Deno.serve(async (req) => {
       });
     }
 
-    // GET /barbers - public list of barbers
+    // GET /barbers
     if (resource === "barbers" && method === "GET" && !subResource) {
       const admin = adminClient();
       const { data } = await admin.from("barbers").select("id, name, phone, photo_url, specialty").eq("is_active", true);
       return json({ barbers: data });
     }
 
-    // GET /services - public list of services
+    // GET /services
     if (resource === "services" && method === "GET") {
       const admin = adminClient();
       const { data } = await admin.from("services").select("*").eq("is_active", true).order("sort_order");
       return json({ services: data });
     }
 
-    // GET /timeslots?barber_id=X&date=YYYY-MM-DD - available time slots
+    // GET /timeslots?barber_id=X&date=YYYY-MM-DD
     if (resource === "timeslots" && method === "GET") {
       const barberId = url.searchParams.get("barber_id");
       const date = url.searchParams.get("date");
@@ -127,7 +173,6 @@ Deno.serve(async (req) => {
       const dayOfWeek = new Date(date + "T12:00:00").getDay();
       const admin = adminClient();
 
-      // Get active slots for this day
       const { data: slots } = await admin
         .from("time_slots")
         .select("slot_time")
@@ -136,7 +181,6 @@ Deno.serve(async (req) => {
         .eq("is_active", true)
         .order("slot_time");
 
-      // Get booked appointments for this date
       const { data: booked } = await admin
         .from("appointments")
         .select("appointment_time")
@@ -144,7 +188,6 @@ Deno.serve(async (req) => {
         .eq("appointment_date", date)
         .in("status", ["pendente", "confirmado"]);
 
-      // Get blocked slots
       const { data: blocked } = await admin
         .from("blocked_slots")
         .select("blocked_time")
@@ -176,7 +219,7 @@ Deno.serve(async (req) => {
       return json({ available_slots: available });
     }
 
-    // POST /appointments - create appointment (public)
+    // POST /appointments (public - customer booking)
     if (resource === "appointments" && method === "POST" && !authHeader) {
       const body = await req.json();
       const { barber_id, client_name, client_phone, appointment_date, appointment_time, service_type, total_amount } = body;
@@ -198,6 +241,10 @@ Deno.serve(async (req) => {
       }).select().single();
 
       if (error) return err(error.message);
+
+      // Send push notification
+      await notifyNewAppointment(barber_id, client_name, appointment_date, appointment_time);
+
       return json({ appointment: data }, 201);
     }
 
@@ -209,15 +256,15 @@ Deno.serve(async (req) => {
     if (!user) return err("Unauthorized", 401);
 
     const role = await getUserRole(user.id);
-    if (!role) return err("No role assigned", 403);
+    if (!role && resource !== "push-tokens") return err("No role assigned", 403);
 
-    const isOwner = role.role === "owner";
-    const myBarberId = role.barber_id;
+    const isOwner = role?.role === "owner";
+    const myBarberId = role?.barber_id;
 
     // ── GET /auth/me ──
     if (resource === "auth" && subResource === "me" && method === "GET") {
       return json({
-        user: { id: user.id, email: user.email, role: role.role, barber_id: myBarberId },
+        user: { id: user.id, email: user.email, role: role?.role, barber_id: myBarberId },
       });
     }
 
@@ -231,20 +278,46 @@ Deno.serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════
-    // APPOINTMENTS
+    // PUSH TOKENS
+    // ═══════════════════════════════════════════
+
+    if (resource === "push-tokens") {
+      const admin = adminClient();
+
+      // POST /push-tokens - register token
+      if (method === "POST") {
+        const { token, device_info } = await req.json();
+        if (!token) return err("token is required");
+
+        const { data, error } = await admin.from("push_tokens").upsert({
+          user_id: user.id,
+          token,
+          device_info: device_info || "",
+        }, { onConflict: "user_id,token" }).select().single();
+
+        if (error) return err(error.message);
+        return json({ push_token: data }, 201);
+      }
+
+      // DELETE /push-tokens - unregister token
+      if (method === "DELETE") {
+        const { token } = await req.json();
+        if (!token) return err("token is required");
+        await admin.from("push_tokens").delete().eq("user_id", user.id).eq("token", token);
+        return json({ success: true });
+      }
+    }
+
+    // ═══════════════════════════════════════════
+    // APPOINTMENTS (authenticated)
     // ═══════════════════════════════════════════
 
     if (resource === "appointments") {
       const admin = adminClient();
 
-      // GET /appointments?date=YYYY-MM-DD&status=X
       if (method === "GET" && !subResource) {
         let query = admin.from("appointments").select("*, barbers(name, photo_url)");
-
-        // Barbers can only see their own
-        if (!isOwner && myBarberId) {
-          query = query.eq("barber_id", myBarberId);
-        }
+        if (!isOwner && myBarberId) query = query.eq("barber_id", myBarberId);
 
         const date = url.searchParams.get("date");
         const dateFrom = url.searchParams.get("date_from");
@@ -263,7 +336,6 @@ Deno.serve(async (req) => {
         return json({ appointments: data });
       }
 
-      // GET /appointments/:id
       if (method === "GET" && subResource) {
         let query = admin.from("appointments").select("*, barbers(name, photo_url)").eq("id", subResource);
         if (!isOwner && myBarberId) query = query.eq("barber_id", myBarberId);
@@ -272,7 +344,6 @@ Deno.serve(async (req) => {
         return json({ appointment: data });
       }
 
-      // PATCH /appointments/:id
       if (method === "PATCH" && subResource) {
         const body = await req.json();
         const allowedFields = ["status", "service_type", "total_amount", "products_sold", "observation", "payment_method"];
@@ -288,7 +359,6 @@ Deno.serve(async (req) => {
         return json({ appointment: data });
       }
 
-      // DELETE /appointments/:id (owner only)
       if (method === "DELETE" && subResource) {
         if (!isOwner) return err("Forbidden", 403);
         const { error } = await admin.from("appointments").delete().eq("id", subResource);
@@ -296,7 +366,6 @@ Deno.serve(async (req) => {
         return json({ success: true });
       }
 
-      // POST /appointments (authenticated - creates with auth context)
       if (method === "POST") {
         const body = await req.json();
         const { data, error } = await admin.from("appointments").insert({
@@ -310,12 +379,15 @@ Deno.serve(async (req) => {
           status: "pendente",
         }).select().single();
         if (error) return err(error.message);
+
+        await notifyNewAppointment(body.barber_id, body.client_name, body.appointment_date, body.appointment_time);
+
         return json({ appointment: data }, 201);
       }
     }
 
     // ═══════════════════════════════════════════
-    // FINANCIAL (authenticated)
+    // FINANCIAL
     // ═══════════════════════════════════════════
 
     if (resource === "financial") {
@@ -323,9 +395,7 @@ Deno.serve(async (req) => {
       const dateFrom = url.searchParams.get("date_from") || new Date().toISOString().split("T")[0];
       const dateTo = url.searchParams.get("date_to") || dateFrom;
 
-      // GET /financial/summary
       if (subResource === "summary" && method === "GET") {
-        // Revenue from appointments
         let apptQuery = admin
           .from("appointments")
           .select("barber_id, total_amount, barbers(name)")
@@ -337,7 +407,6 @@ Deno.serve(async (req) => {
 
         const { data: appointments } = await apptQuery;
 
-        // Expenses (owner only sees all)
         let totalExpenses = 0;
         if (isOwner) {
           const { data: expenses } = await admin
@@ -351,7 +420,6 @@ Deno.serve(async (req) => {
         const totalRevenue = (appointments || []).reduce((sum, a) => sum + Number(a.total_amount || 0), 0);
         const totalAppointments = (appointments || []).length;
 
-        // Per-barber breakdown
         const barberMap: Record<string, { name: string; revenue: number; count: number }> = {};
         for (const a of appointments || []) {
           if (!barberMap[a.barber_id]) {
@@ -378,7 +446,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // GET /financial/expenses (owner only)
       if (subResource === "expenses" && method === "GET") {
         if (!isOwner) return err("Forbidden", 403);
         const { data } = await admin
@@ -390,7 +457,6 @@ Deno.serve(async (req) => {
         return json({ expenses: data });
       }
 
-      // POST /financial/expenses (owner only)
       if (subResource === "expenses" && method === "POST") {
         if (!isOwner) return err("Forbidden", 403);
         const body = await req.json();
@@ -404,13 +470,51 @@ Deno.serve(async (req) => {
         return json({ expense: data }, 201);
       }
 
-      // DELETE /financial/expenses/:id (owner only)
       if (subResource === "expenses" && pathParts[2] && method === "DELETE") {
         if (!isOwner) return err("Forbidden", 403);
         const { error } = await admin.from("expenses").delete().eq("id", pathParts[2]);
         if (error) return err(error.message);
         return json({ success: true });
       }
+    }
+
+    // ═══════════════════════════════════════════
+    // UPLOAD (photos)
+    // ═══════════════════════════════════════════
+
+    if (resource === "upload" && method === "POST") {
+      if (!isOwner) return err("Forbidden", 403);
+
+      const contentType = req.headers.get("content-type") || "";
+      if (!contentType.includes("multipart/form-data") && !contentType.includes("application/octet-stream")) {
+        return err("Content-Type must be multipart/form-data or application/octet-stream");
+      }
+
+      const bucket = url.searchParams.get("bucket") || "barber-photos";
+      const fileName = url.searchParams.get("file_name");
+      if (!fileName) return err("file_name query param is required");
+
+      const allowedBuckets = ["barber-photos", "gallery", "site-assets"];
+      if (!allowedBuckets.includes(bucket)) return err("Invalid bucket. Allowed: " + allowedBuckets.join(", "));
+
+      const fileData = await req.arrayBuffer();
+      const admin = adminClient();
+
+      const ext = fileName.split(".").pop() || "jpg";
+      const path = `${crypto.randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await admin.storage
+        .from(bucket)
+        .upload(path, fileData, {
+          contentType: contentType.includes("multipart") ? undefined : contentType,
+          upsert: true,
+        });
+
+      if (uploadError) return err(uploadError.message);
+
+      const { data: publicUrl } = admin.storage.from(bucket).getPublicUrl(path);
+
+      return json({ url: publicUrl.publicUrl, path, bucket }, 201);
     }
 
     // ═══════════════════════════════════════════
@@ -421,14 +525,12 @@ Deno.serve(async (req) => {
       if (!isOwner) return err("Forbidden", 403);
       const admin = adminClient();
 
-      // GET /manage/barbers
       if (subResource === "barbers" && method === "GET") {
         const { data: barbers } = await admin.from("barbers").select("*").order("name");
         const { data: roles } = await admin.from("user_roles").select("user_id, barber_id, role").eq("role", "barber");
         return json({ barbers, linked_users: roles });
       }
 
-      // POST /manage/barbers - create barber
       if (subResource === "barbers" && method === "POST") {
         const body = await req.json();
         const { data, error } = await admin.from("barbers").insert({
@@ -441,7 +543,6 @@ Deno.serve(async (req) => {
         return json({ barber: data }, 201);
       }
 
-      // PATCH /manage/barbers/:id
       if (subResource === "barbers" && pathParts[2] && method === "PATCH") {
         const body = await req.json();
         const { data, error } = await admin.from("barbers").update(body).eq("id", pathParts[2]).select().single();
@@ -449,7 +550,6 @@ Deno.serve(async (req) => {
         return json({ barber: data });
       }
 
-      // POST /manage/barber-user - create auth user for barber
       if (subResource === "barber-user" && method === "POST") {
         const { email, password, barber_id } = await req.json();
         const { data: newUser, error: createError } = await admin.auth.admin.createUser({
@@ -469,7 +569,6 @@ Deno.serve(async (req) => {
         return json({ success: true, user_id: newUser.user.id }, 201);
       }
 
-      // DELETE /manage/barber-user/:user_id
       if (subResource === "barber-user" && pathParts[2] && method === "DELETE") {
         const userId = pathParts[2];
         await admin.from("user_roles").delete().eq("user_id", userId);
@@ -478,38 +577,30 @@ Deno.serve(async (req) => {
         return json({ success: true });
       }
 
-      // ── Services management ──
-      // GET /manage/services
+      // Services
       if (subResource === "services" && method === "GET") {
         const { data } = await admin.from("services").select("*").order("sort_order");
         return json({ services: data });
       }
-
-      // POST /manage/services
       if (subResource === "services" && method === "POST") {
         const body = await req.json();
         const { data, error } = await admin.from("services").insert(body).select().single();
         if (error) return err(error.message);
         return json({ service: data }, 201);
       }
-
-      // PATCH /manage/services/:id
       if (subResource === "services" && pathParts[2] && method === "PATCH") {
         const body = await req.json();
         const { data, error } = await admin.from("services").update(body).eq("id", pathParts[2]).select().single();
         if (error) return err(error.message);
         return json({ service: data });
       }
-
-      // DELETE /manage/services/:id
       if (subResource === "services" && pathParts[2] && method === "DELETE") {
         const { error } = await admin.from("services").delete().eq("id", pathParts[2]);
         if (error) return err(error.message);
         return json({ success: true });
       }
 
-      // ── Time slots ──
-      // GET /manage/timeslots?barber_id=X
+      // Time slots
       if (subResource === "timeslots" && method === "GET") {
         const barberId = url.searchParams.get("barber_id");
         let query = admin.from("time_slots").select("*").order("day_of_week").order("slot_time");
@@ -517,32 +608,25 @@ Deno.serve(async (req) => {
         const { data } = await query;
         return json({ time_slots: data });
       }
-
-      // POST /manage/timeslots
       if (subResource === "timeslots" && method === "POST") {
         const body = await req.json();
         const { data, error } = await admin.from("time_slots").insert(body).select();
         if (error) return err(error.message);
         return json({ time_slots: data }, 201);
       }
-
-      // DELETE /manage/timeslots/:id
       if (subResource === "timeslots" && pathParts[2] && method === "DELETE") {
         const { error } = await admin.from("time_slots").delete().eq("id", pathParts[2]);
         if (error) return err(error.message);
         return json({ success: true });
       }
 
-      // ── Blocked slots ──
-      // POST /manage/blocked-slots
+      // Blocked slots
       if (subResource === "blocked-slots" && method === "POST") {
         const body = await req.json();
         const { data, error } = await admin.from("blocked_slots").insert(body).select().single();
         if (error) return err(error.message);
         return json({ blocked_slot: data }, 201);
       }
-
-      // DELETE /manage/blocked-slots/:id
       if (subResource === "blocked-slots" && pathParts[2] && method === "DELETE") {
         const { error } = await admin.from("blocked_slots").delete().eq("id", pathParts[2]);
         if (error) return err(error.message);
