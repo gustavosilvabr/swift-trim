@@ -7,7 +7,8 @@ import { ptBR } from "date-fns/locale";
 import {
   LogOut, Check, X, Trash2, Edit2, ArrowLeft,
   User, Phone, DollarSign, Image, Settings, Clock,
-  Upload, Plus, MessageCircle, Users, Scissors, ChevronLeft, ChevronRight, Shield
+  Upload, Plus, MessageCircle, Users, Scissors, ChevronLeft, ChevronRight, Shield,
+  BarChart3, CalendarDays, UserX, AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import FinancialTab from "@/components/admin/FinancialTab";
@@ -18,9 +19,9 @@ import UpcomingAppointments from "@/components/admin/UpcomingAppointments";
 type Session = Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"];
 
 const statusColors: Record<string, string> = {
-  pendente: "bg-yellow-500/20 text-yellow-400",
-  confirmado: "bg-green-500/20 text-green-400",
-  cancelado: "bg-red-500/20 text-red-400",
+  pendente: "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
+  confirmado: "bg-green-500/20 text-green-400 border border-green-500/30",
+  cancelado: "bg-red-500/20 text-red-400 border border-red-500/30",
 };
 
 type Tab = "appointments" | "barbers" | "financial" | "gallery" | "clients" | "hours" | "services" | "settings" | "access";
@@ -44,7 +45,6 @@ const Admin = () => {
   const { appointments, refetch } = useAppointments();
   const { barbers } = useBarbers();
 
-  // Role state
   const [userRole, setUserRole] = useState<"owner" | "barber" | null>(null);
   const [myBarberId, setMyBarberId] = useState<string | null>(null);
 
@@ -72,14 +72,14 @@ const Admin = () => {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
 
-  // Calendar date for appointments
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
-  // Barber user management
   const [newBarberEmail, setNewBarberEmail] = useState("");
   const [newBarberPw, setNewBarberPw] = useState("");
   const [selectedBarberId, setSelectedBarberId] = useState("");
   const [barberUsers, setBarberUsers] = useState<{ user_id: string; barber_id: string | null; role: string }[]>([]);
+
+  const [deletingBarber, setDeletingBarber] = useState<string | null>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -93,7 +93,6 @@ const Admin = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch role
   useEffect(() => {
     if (!session) { setUserRole(null); setMyBarberId(null); return; }
     const fetchRole = async () => {
@@ -103,17 +102,13 @@ const Admin = () => {
         setUserRole(r.role as "owner" | "barber");
         setMyBarberId(r.barber_id);
       } else {
-        // Check if this is the original admin (owner without role entry)
         const { data: isOwner } = await supabase.rpc("is_owner");
-        if (isOwner) {
-          setUserRole("owner");
-        }
+        if (isOwner) setUserRole("owner");
       }
     };
     fetchRole();
   }, [session]);
 
-  // Fetch barber users for access tab
   useEffect(() => {
     if (!session || userRole !== "owner") return;
     const fetchBarberUsers = async () => {
@@ -192,6 +187,35 @@ const Admin = () => {
     setEditingBarber(null);
   };
 
+  const deleteBarber = async (barberId: string) => {
+    setDeletingBarber(barberId);
+    try {
+      // 1. Delete all appointments for this barber
+      await supabase.from("appointments").delete().eq("barber_id", barberId);
+      // 2. Delete all time_slots
+      await supabase.from("time_slots").delete().eq("barber_id", barberId);
+      // 3. Delete all blocked_slots
+      await supabase.from("blocked_slots").delete().eq("barber_id", barberId);
+      // 4. Check if barber has a user account and delete it
+      const barber = barbers.find((b) => b.id === barberId);
+      if (barber && (barber as any).user_id) {
+        try {
+          await supabase.functions.invoke("manage-barber-user", {
+            body: { action: "delete", user_id: (barber as any).user_id },
+          });
+        } catch {}
+      }
+      // 5. Delete user_roles linked to this barber
+      await supabase.from("user_roles").delete().eq("barber_id", barberId);
+      // 6. Delete the barber
+      await supabase.from("barbers").delete().eq("id", barberId);
+      toast.success("Barbeiro e todo histórico excluídos com sucesso");
+    } catch (err: any) {
+      toast.error("Erro ao excluir barbeiro: " + (err.message || ""));
+    }
+    setDeletingBarber(null);
+  };
+
   const handlePhotoUpload = async (barberId: string, file: File) => {
     const ext = file.name.split(".").pop();
     const path = `barbers/${barberId}.${ext}`;
@@ -265,7 +289,6 @@ const Admin = () => {
       if (data?.error) throw new Error(data.error);
       toast.success("Conta de barbeiro criada!");
       setNewBarberEmail(""); setNewBarberPw(""); setSelectedBarberId("");
-      // Refresh
       const { data: roles } = await supabase.from("user_roles").select("user_id, barber_id, role");
       if (roles) setBarberUsers(roles);
     } catch (err: any) {
@@ -299,21 +322,37 @@ const Admin = () => {
   if (!session) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="w-full max-w-sm space-y-6 animate-fade-in">
-          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm">
-            <ArrowLeft className="w-4 h-4" /> Voltar
+        <div className="w-full max-w-sm space-y-8 animate-fade-in">
+          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium">
+            <ArrowLeft className="w-4 h-4" /> Voltar ao site
           </button>
-          <div className="text-center">
-            <h1 className="font-display text-3xl font-bold gold-text mb-2">Admin</h1>
-            <p className="text-muted-foreground text-sm">Acesso restrito</p>
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 rounded-2xl gold-gradient mx-auto flex items-center justify-center mb-4">
+              <Shield className="w-8 h-8 text-primary-foreground" />
+            </div>
+            <h1 className="font-display text-3xl font-bold text-foreground">Painel Admin</h1>
+            <p className="text-muted-foreground text-sm">Acesse sua conta para gerenciar</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground border border-border focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" />
-            <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg bg-secondary text-foreground placeholder:text-muted-foreground border border-border focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" />
-            {loginError && <p className="text-destructive text-sm">{loginError}</p>}
-            <button type="submit" className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-bold transition-all hover:opacity-90">Entrar</button>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</label>
+              <input type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-secondary/80 text-foreground placeholder:text-muted-foreground border border-border focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Senha</label>
+              <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-secondary/80 text-foreground placeholder:text-muted-foreground border border-border focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all text-sm" />
+            </div>
+            {loginError && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20">
+                <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+                <p className="text-destructive text-sm">{loginError}</p>
+              </div>
+            )}
+            <button type="submit" className="w-full py-3.5 rounded-xl gold-gradient text-primary-foreground font-bold text-sm tracking-wide hover:opacity-90 transition-all shadow-lg">
+              Entrar
+            </button>
           </form>
         </div>
       </div>
@@ -323,23 +362,20 @@ const Admin = () => {
   const isOwner = userRole === "owner";
   const getBarberName = (id: string) => barbers.find((b) => b.id === id)?.name || "—";
 
-  // Filter appointments based on role
   const visibleAppointments = isOwner
     ? appointments
     : appointments.filter((a) => a.barber_id === myBarberId);
 
-  // Filter by selected date
   const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
   const dateFilteredAppointments = visibleAppointments.filter((a) => a.appointment_date === selectedDateStr);
 
   const pendentes = visibleAppointments.filter((a) => a.status === "pendente");
   const confirmados = visibleAppointments.filter((a) => a.status === "confirmado");
 
-  // Tabs based on role
   const ownerTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "appointments", label: "Agenda", icon: <Clock className="w-4 h-4" /> },
+    { id: "appointments", label: "Agenda", icon: <CalendarDays className="w-4 h-4" /> },
     { id: "barbers", label: "Barbeiros", icon: <User className="w-4 h-4" /> },
-    { id: "financial", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
+    { id: "financial", label: "Financeiro", icon: <BarChart3 className="w-4 h-4" /> },
     { id: "services", label: "Serviços", icon: <Scissors className="w-4 h-4" /> },
     { id: "clients", label: "Clientes", icon: <Users className="w-4 h-4" /> },
     { id: "hours", label: "Horários", icon: <Clock className="w-4 h-4" /> },
@@ -349,8 +385,8 @@ const Admin = () => {
   ];
 
   const barberTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "appointments", label: "Agenda", icon: <Clock className="w-4 h-4" /> },
-    { id: "financial", label: "Financeiro", icon: <DollarSign className="w-4 h-4" /> },
+    { id: "appointments", label: "Agenda", icon: <CalendarDays className="w-4 h-4" /> },
+    { id: "financial", label: "Financeiro", icon: <BarChart3 className="w-4 h-4" /> },
     { id: "settings", label: "Config", icon: <Settings className="w-4 h-4" /> },
   ];
 
@@ -359,53 +395,89 @@ const Admin = () => {
   const thisMonth = format(new Date(), "yyyy-MM");
   const thisYear = format(new Date(), "yyyy");
 
-  // Navigate date
   const goDate = (days: number) => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + days);
     setSelectedDate(d);
   };
 
+  // Only show active barbers in admin lists
+  const activeBarbers = barbers.filter((b) => (b as any).is_active !== false);
+
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 w-full py-3 sm:py-4 px-3 sm:px-4 bg-background/80 backdrop-blur-lg border-b border-border">
+      {/* Header */}
+      <header className="sticky top-0 z-40 w-full py-4 px-4 bg-background/90 backdrop-blur-xl border-b border-border/50">
         <div className="flex items-center justify-between max-w-2xl mx-auto">
-          <h1 className="font-display text-lg sm:text-xl font-bold gold-text">
-            {isOwner ? "Painel Admin" : "Minha Agenda"}
-          </h1>
-          <button onClick={handleLogout} className="p-2 rounded-lg hover:bg-secondary transition-colors">
-            <LogOut className="w-5 h-5 text-muted-foreground" />
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg gold-gradient flex items-center justify-center">
+              <Scissors className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="font-display text-lg font-bold text-foreground leading-tight">
+                {isOwner ? "Painel Admin" : "Minha Agenda"}
+              </h1>
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                {isOwner ? "Controle Total" : "Área do Barbeiro"}
+              </p>
+            </div>
+          </div>
+          <button onClick={handleLogout} className="p-2.5 rounded-xl hover:bg-secondary transition-colors group">
+            <LogOut className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
           </button>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-12">
-        {/* Dashboard cards */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <div className="glass-card rounded-xl p-3 sm:p-4 text-center">
-            <p className="text-xl sm:text-2xl font-bold text-yellow-400">{pendentes.length}</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Pendentes</p>
+      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6 pb-16">
+        {/* Dashboard Summary */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-yellow-500/20 to-yellow-600/5 border border-yellow-500/20 p-4">
+            <div className="relative z-10">
+              <p className="text-3xl font-bold text-yellow-400 font-display">{pendentes.length}</p>
+              <p className="text-xs text-yellow-400/70 font-medium mt-1 uppercase tracking-wider">Pendentes</p>
+            </div>
+            <Clock className="absolute -right-2 -bottom-2 w-16 h-16 text-yellow-500/10" />
           </div>
-          <div className="glass-card rounded-xl p-3 sm:p-4 text-center">
-            <p className="text-xl sm:text-2xl font-bold text-green-400">{confirmados.length}</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Confirmados</p>
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-green-500/20 to-green-600/5 border border-green-500/20 p-4">
+            <div className="relative z-10">
+              <p className="text-3xl font-bold text-green-400 font-display">{confirmados.length}</p>
+              <p className="text-xs text-green-400/70 font-medium mt-1 uppercase tracking-wider">Confirmados</p>
+            </div>
+            <Check className="absolute -right-2 -bottom-2 w-16 h-16 text-green-500/10" />
           </div>
         </div>
 
         {/* Upcoming appointments */}
         <UpcomingAppointments appointments={visibleAppointments} barbers={barbers} />
 
-        {/* Per barber stats - only for owner */}
-        {isOwner && (
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
-            {barbers.map((b) => {
+        {/* Per barber stats - owner */}
+        {isOwner && activeBarbers.length > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            {activeBarbers.map((b) => {
               const bApps = appointments.filter((a) => a.barber_id === b.id);
               return (
-                <div key={b.id} className="glass-card rounded-xl p-3 sm:p-4">
-                  <p className="font-display font-semibold text-foreground text-sm mb-2">{b.name}</p>
-                  <div className="space-y-1 text-xs">
-                    <p className="text-yellow-400">{bApps.filter((a) => a.status === "pendente").length} pendentes</p>
-                    <p className="text-green-400">{bApps.filter((a) => a.status === "confirmado").length} confirmados</p>
+                <div key={b.id} className="rounded-2xl bg-secondary/50 border border-border/50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-full overflow-hidden border border-primary/30 flex-shrink-0">
+                      {b.photo_url ? (
+                        <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-secondary flex items-center justify-center">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="font-display font-semibold text-foreground text-sm truncate">{b.name}</p>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Pendentes</span>
+                      <span className="text-yellow-400 font-semibold">{bApps.filter((a) => a.status === "pendente").length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Confirmados</span>
+                      <span className="text-green-400 font-semibold">{bApps.filter((a) => a.status === "confirmado").length}</span>
+                    </div>
                   </div>
                 </div>
               );
@@ -414,10 +486,14 @@ const Admin = () => {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide -mx-4 px-4">
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-all whitespace-nowrap ${activeTab === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
+              className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                activeTab === t.id
+                  ? "gold-gradient text-primary-foreground shadow-lg shadow-primary/20"
+                  : "bg-secondary/70 text-muted-foreground hover:text-foreground hover:bg-secondary"
+              }`}>
               {t.icon} {t.label}
             </button>
           ))}
@@ -425,62 +501,81 @@ const Admin = () => {
 
         {/* APPOINTMENTS TAB */}
         {activeTab === "appointments" && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* Date navigator */}
-            <div className="glass-card rounded-xl p-3 flex items-center justify-between">
-              <button onClick={() => goDate(-1)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+            <div className="rounded-2xl bg-secondary/50 border border-border/50 p-4 flex items-center justify-between">
+              <button onClick={() => goDate(-1)} className="p-2 rounded-xl hover:bg-background/50 transition-colors">
                 <ChevronLeft className="w-5 h-5 text-foreground" />
               </button>
               <div className="text-center">
-                <p className="font-display font-semibold text-foreground text-sm">
+                <p className="font-display font-bold text-foreground">
                   {isSameDay(selectedDate, new Date()) ? "Hoje" : format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
                 </p>
-                <p className="text-[10px] text-muted-foreground">{format(selectedDate, "EEEE", { locale: ptBR })}</p>
+                <p className="text-[10px] text-muted-foreground capitalize font-medium">{format(selectedDate, "EEEE", { locale: ptBR })}</p>
               </div>
-              <button onClick={() => goDate(1)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+              <button onClick={() => goDate(1)} className="p-2 rounded-xl hover:bg-background/50 transition-colors">
                 <ChevronRight className="w-5 h-5 text-foreground" />
               </button>
             </div>
 
             {/* Quick date buttons */}
-            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
               {[-2, -1, 0, 1, 2, 3, 4, 5, 6].map((offset) => {
                 const d = new Date();
                 d.setDate(d.getDate() + offset);
                 const isActive = isSameDay(d, selectedDate);
                 return (
                   <button key={offset} onClick={() => setSelectedDate(d)}
-                    className={`flex flex-col items-center px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap min-w-[48px] ${isActive ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
-                    <span className="text-[10px]">{format(d, "EEE", { locale: ptBR })}</span>
-                    <span className="font-bold">{format(d, "dd")}</span>
+                    className={`flex flex-col items-center px-3 py-2.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap min-w-[52px] ${
+                      isActive
+                        ? "gold-gradient text-primary-foreground shadow-md"
+                        : "bg-secondary/70 text-muted-foreground hover:bg-secondary"
+                    }`}>
+                    <span className="text-[10px] capitalize font-medium">{format(d, "EEE", { locale: ptBR })}</span>
+                    <span className="font-bold text-sm">{format(d, "dd")}</span>
                   </button>
                 );
               })}
             </div>
 
-            {dateFilteredAppointments.length === 0 && <p className="text-center text-muted-foreground py-8 text-sm">Nenhum agendamento para esta data</p>}
+            {dateFilteredAppointments.length === 0 && (
+              <div className="text-center py-12 rounded-2xl bg-secondary/30 border border-border/30">
+                <CalendarDays className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
+                <p className="text-muted-foreground text-sm">Nenhum agendamento para esta data</p>
+              </div>
+            )}
             {dateFilteredAppointments.map((a) => (
-              <div key={a.id} className="glass-card rounded-xl p-3 sm:p-4 space-y-2 sm:space-y-3">
+              <div key={a.id} className="rounded-2xl bg-secondary/50 border border-border/50 p-4 space-y-3 hover:border-primary/20 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-foreground text-sm truncate">{a.client_name}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3 flex-shrink-0" /> {a.client_phone}</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                      <Phone className="w-3 h-3 flex-shrink-0" /> {a.client_phone}
+                    </p>
                   </div>
-                  <span className={`text-[10px] sm:text-xs px-2 py-1 rounded-full font-medium whitespace-nowrap ${statusColors[a.status] || "bg-secondary text-muted-foreground"}`}>{a.status}</span>
+                  <span className={`text-[10px] px-2.5 py-1 rounded-full font-semibold uppercase tracking-wide ${statusColors[a.status] || "bg-secondary text-muted-foreground"}`}>
+                    {a.status}
+                  </span>
                 </div>
-                <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground flex-wrap">
-                  <span>{getBarberName(a.barber_id)}</span>
-                  <span>{a.appointment_time.substring(0, 5)}</span>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><User className="w-3 h-3" /> {getBarberName(a.barber_id)}</span>
+                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {a.appointment_time.substring(0, 5)}</span>
                 </div>
                 {a.service_type && (
-                  <p className="text-xs text-primary">{a.service_type} {(a.total_amount ?? 0) > 0 ? `• R$ ${Number(a.total_amount).toFixed(2)}` : ""}</p>
+                  <p className="text-xs text-primary font-medium">
+                    {a.service_type} {(a.total_amount ?? 0) > 0 ? `• R$ ${Number(a.total_amount).toFixed(2)}` : ""}
+                  </p>
                 )}
-                <div className="flex gap-1.5 sm:gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap pt-1">
                   {a.status === "pendente" && (
-                    <button onClick={() => updateStatus(a.id, "confirmado")} className="flex items-center gap-1 text-[10px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"><Check className="w-3 h-3" /> Confirmar</button>
+                    <button onClick={() => updateStatus(a.id, "confirmado")} className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-colors font-medium">
+                      <Check className="w-3.5 h-3.5" /> Confirmar
+                    </button>
                   )}
                   {a.status !== "cancelado" && (
-                    <button onClick={() => updateStatus(a.id, "cancelado")} className="flex items-center gap-1 text-[10px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"><X className="w-3 h-3" /> Cancelar</button>
+                    <button onClick={() => updateStatus(a.id, "cancelado")} className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors font-medium">
+                      <X className="w-3.5 h-3.5" /> Cancelar
+                    </button>
                   )}
                   <button onClick={() => {
                     if (editingAppointment === a.id) { setEditingAppointment(null); return; }
@@ -490,24 +585,47 @@ const Admin = () => {
                     setEditAmount(String(a.total_amount || ""));
                     setEditObs(a.observation || "");
                     setEditPayment(a.payment_method || "");
-                  }} className="flex items-center gap-1 text-[10px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"><Edit2 className="w-3 h-3" /> Editar</button>
+                  }} className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-primary/15 text-primary hover:bg-primary/25 transition-colors font-medium">
+                    <Edit2 className="w-3.5 h-3.5" /> Editar
+                  </button>
                   {isOwner && (
-                    <button onClick={() => deleteAppointment(a.id)} className="flex items-center gap-1 text-[10px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-3 h-3" /> Excluir</button>
+                    <button onClick={() => deleteAppointment(a.id)} className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-secondary text-muted-foreground hover:text-destructive transition-colors font-medium">
+                      <Trash2 className="w-3.5 h-3.5" /> Excluir
+                    </button>
                   )}
                 </div>
                 {editingAppointment === a.id && (
-                  <div className="space-y-2 sm:space-y-3 pt-2 border-t border-border animate-fade-in">
-                    <input type="text" placeholder="Tipo de serviço" value={editServiceType} onChange={(e) => setEditServiceType(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-                    <input type="text" placeholder="Produtos vendidos" value={editProducts} onChange={(e) => setEditProducts(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-                    <input type="number" placeholder="Valor total (R$)" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-                    <input type="text" placeholder="Observação" value={editObs} onChange={(e) => setEditObs(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-                    <select value={editPayment} onChange={(e) => setEditPayment(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border">
-                      <option value="">Pagamento (opcional)</option>
-                      <option value="dinheiro">Dinheiro</option>
-                      <option value="pix">Pix</option>
-                      <option value="cartao">Cartão</option>
-                    </select>
-                    <button onClick={() => saveAppointmentEdit(a.id)} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Salvar</button>
+                  <div className="space-y-3 pt-3 border-t border-border/50 animate-fade-in">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Serviço</label>
+                      <input type="text" value={editServiceType} onChange={(e) => setEditServiceType(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Produtos</label>
+                      <input type="text" value={editProducts} onChange={(e) => setEditProducts(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Valor (R$)</label>
+                        <input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Pagamento</label>
+                        <select value={editPayment} onChange={(e) => setEditPayment(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border">
+                          <option value="">Selecione</option>
+                          <option value="dinheiro">Dinheiro</option>
+                          <option value="pix">Pix</option>
+                          <option value="cartao">Cartão</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Observação</label>
+                      <input type="text" value={editObs} onChange={(e) => setEditObs(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                    </div>
+                    <button onClick={() => saveAppointmentEdit(a.id)} className="w-full py-2.5 rounded-xl gold-gradient text-primary-foreground text-sm font-bold shadow-md">
+                      Salvar Alterações
+                    </button>
                   </div>
                 )}
               </div>
@@ -518,45 +636,112 @@ const Admin = () => {
         {/* BARBERS TAB - owner only */}
         {activeTab === "barbers" && isOwner && (
           <div className="space-y-4">
-            <div className="glass-card rounded-xl p-4 space-y-3">
-              <p className="font-display font-semibold text-foreground">Foto da Fachada</p>
-              <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFacadeUpload(f); }} className="text-sm text-muted-foreground" />
-            </div>
-            {barbers.map((b) => (
-              <div key={b.id} className="glass-card rounded-xl p-3 sm:p-4 space-y-3 sm:space-y-4">
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-border flex-shrink-0">
-                    {b.photo_url ? <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-secondary flex items-center justify-center"><User className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground" /></div>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-display font-semibold text-foreground text-sm">{b.name}</p>
-                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{b.phone}</p>
-                  </div>
-                  <button onClick={() => {
-                    setEditingBarber(editingBarber === b.id ? null : b.id);
-                    setBarberName(b.name); setBarberPhone(b.phone);
-                    setBarberSpecialty((b as any).specialty || ""); setBarberPrice(String((b as any).default_price || ""));
-                    setBarberActive((b as any).is_active !== false);
-                  }} className="p-2 rounded-lg hover:bg-secondary transition-colors"><Edit2 className="w-4 h-4 text-muted-foreground" /></button>
-                </div>
-                {editingBarber === b.id && (
-                  <div className="space-y-3 animate-fade-in">
-                    <input type="text" placeholder="Nome" value={barberName} onChange={(e) => setBarberName(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
-                    <input type="tel" placeholder="WhatsApp" value={barberPhone} onChange={(e) => setBarberPhone(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
-                    <input type="text" placeholder="Especialidade" value={barberSpecialty} onChange={(e) => setBarberSpecialty(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
-                    <input type="number" placeholder="Valor padrão (R$)" value={barberPrice} onChange={(e) => setBarberPrice(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
-                    <label className="flex items-center gap-2 text-sm text-foreground">
-                      <input type="checkbox" checked={barberActive} onChange={(e) => setBarberActive(e.target.checked)} className="accent-primary" /> Ativo
-                    </label>
-                    <div>
-                      <label className="text-sm text-muted-foreground block mb-1">Alterar Foto</label>
-                      <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(b.id, f); }} className="text-sm text-muted-foreground" />
-                    </div>
-                    <button onClick={() => updateBarber(b.id)} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-all">Salvar</button>
-                  </div>
-                )}
+            <div className="rounded-2xl bg-secondary/50 border border-border/50 p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Image className="w-5 h-5 text-primary" />
+                <p className="font-display font-semibold text-foreground">Foto da Fachada</p>
               </div>
-            ))}
+              <label className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                <Upload className="w-4 h-4" /> Escolher imagem
+                <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFacadeUpload(f); }} className="hidden" />
+              </label>
+            </div>
+
+            {barbers.map((b) => {
+              const isInactive = (b as any).is_active === false;
+              return (
+                <div key={b.id} className={`rounded-2xl border p-5 space-y-4 transition-all ${
+                  isInactive
+                    ? "bg-secondary/20 border-border/30 opacity-60"
+                    : "bg-secondary/50 border-border/50"
+                }`}>
+                  <div className="flex items-center gap-4">
+                    <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 flex-shrink-0 ${isInactive ? "border-border/50" : "border-primary/30"}`}>
+                      {b.photo_url ? (
+                        <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-secondary flex items-center justify-center">
+                          <User className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-display font-bold text-foreground">{b.name}</p>
+                        {isInactive && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-semibold uppercase">Inativo</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{b.phone}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => {
+                        setEditingBarber(editingBarber === b.id ? null : b.id);
+                        setBarberName(b.name); setBarberPhone(b.phone);
+                        setBarberSpecialty((b as any).specialty || ""); setBarberPrice(String((b as any).default_price || ""));
+                        setBarberActive((b as any).is_active !== false);
+                      }} className="p-2.5 rounded-xl hover:bg-background/50 transition-colors">
+                        <Edit2 className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Excluir ${b.name} e todo o histórico de agendamentos? Esta ação é irreversível!`)) {
+                            deleteBarber(b.id);
+                          }
+                        }}
+                        disabled={deletingBarber === b.id}
+                        className="p-2.5 rounded-xl hover:bg-red-500/10 transition-colors group disabled:opacity-50"
+                      >
+                        {deletingBarber === b.id ? (
+                          <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4 text-muted-foreground group-hover:text-red-400 transition-colors" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  {editingBarber === b.id && (
+                    <div className="space-y-3 pt-3 border-t border-border/50 animate-fade-in">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Nome</label>
+                        <input type="text" value={barberName} onChange={(e) => setBarberName(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">WhatsApp</label>
+                        <input type="tel" value={barberPhone} onChange={(e) => setBarberPhone(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Especialidade</label>
+                          <input type="text" value={barberSpecialty} onChange={(e) => setBarberSpecialty(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Valor Padrão</label>
+                          <input type="number" value={barberPrice} onChange={(e) => setBarberPrice(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-3 py-2 text-sm text-foreground cursor-pointer">
+                        <div className={`w-10 h-6 rounded-full relative transition-colors ${barberActive ? "bg-green-500" : "bg-secondary"}`}
+                          onClick={() => setBarberActive(!barberActive)}>
+                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${barberActive ? "left-5" : "left-1"}`} />
+                        </div>
+                        <span className="font-medium">{barberActive ? "Ativo" : "Inativo"}</span>
+                      </label>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Alterar Foto</label>
+                        <label className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                          <Upload className="w-4 h-4" /> Escolher foto
+                          <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(b.id, f); }} className="hidden" />
+                        </label>
+                      </div>
+                      <button onClick={() => updateBarber(b.id)} className="w-full py-2.5 rounded-xl gold-gradient text-primary-foreground text-sm font-bold shadow-md hover:opacity-90 transition-all">
+                        Salvar Alterações
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -571,13 +756,16 @@ const Admin = () => {
           />
         )}
 
-        {/* SERVICES TAB - owner only */}
+        {/* SERVICES TAB */}
         {activeTab === "services" && isOwner && <ServicesManager />}
 
-        {/* CLIENTS TAB - owner only */}
+        {/* CLIENTS TAB */}
         {activeTab === "clients" && isOwner && (
-          <div className="space-y-3">
-            <p className="font-display font-semibold text-foreground text-base sm:text-lg">Histórico de Clientes</p>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-5 h-5 text-primary" />
+              <h3 className="font-display font-bold text-foreground text-lg">Histórico de Clientes</h3>
+            </div>
             {(() => {
               const clientMap = new Map<string, { name: string; phone: string; cuts: typeof appointments; lastCut: string | null }>();
               appointments.filter((a) => a.status === "confirmado").forEach((a) => {
@@ -600,52 +788,80 @@ const Admin = () => {
                     const waLink = `https://wa.me/${c.phone.replace(/\D/g, "")}?text=${waMsg}`;
 
                     return (
-                      <div key={c.phone} className="glass-card rounded-xl p-3 sm:p-4 space-y-2">
+                      <div key={c.phone} className="rounded-2xl bg-secondary/50 border border-border/50 p-4 space-y-3 hover:border-primary/20 transition-colors">
                         <div className="flex items-center justify-between">
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-foreground text-sm truncate">{c.name}</p>
-                            <p className="text-xs text-muted-foreground">{c.phone}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{c.phone}</p>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center gap-2.5 flex-shrink-0">
                             <span className={`text-xs font-bold ${statusColor}`}>{daysSinceCut}d</span>
-                            <a href={waLink} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30">
+                            <a href={waLink} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-colors">
                               <MessageCircle className="w-4 h-4" />
                             </a>
                           </div>
                         </div>
-                        <div className="grid grid-cols-4 gap-1 sm:gap-2 text-[10px] sm:text-xs text-center">
-                          <div><p className="text-muted-foreground">Mês</p><p className="font-bold text-foreground">{thisMonthCuts}</p></div>
-                          <div><p className="text-muted-foreground">Ano</p><p className="font-bold text-foreground">{thisYearCuts}</p></div>
-                          <div><p className="text-muted-foreground">Total</p><p className="font-bold text-foreground">{c.cuts.length}</p></div>
-                          <div><p className="text-muted-foreground">Barbeiro</p><p className="font-bold text-foreground truncate">{lastBarber}</p></div>
+                        <div className="grid grid-cols-4 gap-2 text-xs text-center">
+                          <div className="rounded-xl bg-background/40 py-2">
+                            <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Mês</p>
+                            <p className="font-bold text-foreground mt-0.5">{thisMonthCuts}</p>
+                          </div>
+                          <div className="rounded-xl bg-background/40 py-2">
+                            <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Ano</p>
+                            <p className="font-bold text-foreground mt-0.5">{thisYearCuts}</p>
+                          </div>
+                          <div className="rounded-xl bg-background/40 py-2">
+                            <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Total</p>
+                            <p className="font-bold text-foreground mt-0.5">{c.cuts.length}</p>
+                          </div>
+                          <div className="rounded-xl bg-background/40 py-2">
+                            <p className="text-muted-foreground text-[10px] uppercase tracking-wider">Barb.</p>
+                            <p className="font-bold text-foreground mt-0.5 truncate px-1">{lastBarber}</p>
+                          </div>
                         </div>
-                        {c.lastCut && <p className="text-[10px] sm:text-xs text-muted-foreground">Último: {format(new Date(c.lastCut + "T00:00:00"), "dd/MM/yyyy")}</p>}
+                        {c.lastCut && (
+                          <p className="text-xs text-muted-foreground">
+                            Último corte: {format(new Date(c.lastCut + "T00:00:00"), "dd/MM/yyyy")}
+                          </p>
+                        )}
                       </div>
                     );
                   })}
-                  {clientMap.size === 0 && <p className="text-center text-muted-foreground py-8">Nenhum cliente com atendimento</p>}
+                  {clientMap.size === 0 && (
+                    <div className="text-center py-12 rounded-2xl bg-secondary/30 border border-border/30">
+                      <UserX className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
+                      <p className="text-muted-foreground text-sm">Nenhum cliente com atendimento</p>
+                    </div>
+                  )}
                 </>
               );
             })()}
           </div>
         )}
 
-        {/* WORKING HOURS TAB - owner only */}
+        {/* WORKING HOURS TAB */}
         {activeTab === "hours" && isOwner && <WorkingHoursManager barbers={barbers} />}
 
-        {/* GALLERY TAB - owner only */}
+        {/* GALLERY TAB */}
         {activeTab === "gallery" && isOwner && (
           <div className="space-y-4">
-            <div className="glass-card rounded-xl p-4 space-y-3">
-              <p className="font-display font-semibold text-foreground">Upload de Imagens</p>
-              <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleGalleryUpload(f); }} className="text-sm text-muted-foreground" />
+            <div className="rounded-2xl bg-secondary/50 border border-border/50 p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Image className="w-5 h-5 text-primary" />
+                <p className="font-display font-semibold text-foreground">Upload de Imagens</p>
+              </div>
+              <label className="flex items-center justify-center gap-2 px-4 py-6 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                <Upload className="w-5 h-5" /> Clique para enviar uma imagem
+                <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleGalleryUpload(f); }} className="hidden" />
+              </label>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {galleryImages.map((img) => (
-                <div key={img.id} className="relative rounded-xl overflow-hidden border border-border group">
+                <div key={img.id} className="relative rounded-2xl overflow-hidden border border-border/50 group">
                   <img src={img.image_url} alt={img.title} className="w-full aspect-square object-cover" />
-                  <button onClick={() => deleteGalleryImage(img.id)} className="absolute top-2 right-2 p-1.5 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 className="w-3 h-3" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <button onClick={() => deleteGalleryImage(img.id)} className="absolute bottom-3 right-3 p-2 rounded-xl bg-red-500/90 text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
@@ -653,49 +869,69 @@ const Admin = () => {
           </div>
         )}
 
-        {/* ACCESS TAB - owner only */}
+        {/* ACCESS TAB */}
         {activeTab === "access" && isOwner && (
           <div className="space-y-5">
-            <div className="glass-card rounded-xl p-4 space-y-3">
+            <div className="rounded-2xl bg-secondary/50 border border-border/50 p-5 space-y-4">
               <div className="flex items-center gap-2">
-                <Shield className="w-4 h-4 text-primary" />
-                <p className="font-display font-semibold text-foreground text-sm">Criar Conta de Barbeiro</p>
+                <Shield className="w-5 h-5 text-primary" />
+                <p className="font-display font-bold text-foreground">Criar Conta de Barbeiro</p>
               </div>
-              <select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border">
-                <option value="">Selecione o barbeiro</option>
-                {barbers.filter((b) => !barberUsers.some((u) => u.barber_id === b.id)).map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-              <input type="email" placeholder="Email do barbeiro" value={newBarberEmail} onChange={(e) => setNewBarberEmail(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-              <input type="password" placeholder="Senha" value={newBarberPw} onChange={(e) => setNewBarberPw(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-              <button onClick={handleCreateBarberUser} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">
-                <Plus className="w-4 h-4 inline mr-1" />Criar Conta
-              </button>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Barbeiro</label>
+                  <select value={selectedBarberId} onChange={(e) => setSelectedBarberId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border">
+                    <option value="">Selecione o barbeiro</option>
+                    {barbers.filter((b) => !barberUsers.some((u) => u.barber_id === b.id)).map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Email</label>
+                  <input type="email" placeholder="email@exemplo.com" value={newBarberEmail} onChange={(e) => setNewBarberEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Senha</label>
+                  <input type="password" placeholder="••••••••" value={newBarberPw} onChange={(e) => setNewBarberPw(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <button onClick={handleCreateBarberUser} className="w-full py-2.5 rounded-xl gold-gradient text-primary-foreground text-sm font-bold shadow-md">
+                  <Plus className="w-4 h-4 inline mr-1.5" />Criar Conta
+                </button>
+              </div>
             </div>
 
-            {/* Existing barber accounts */}
-            <div className="space-y-2">
-              <p className="font-display font-semibold text-foreground text-sm">Contas Ativas</p>
+            <div className="space-y-3">
+              <p className="font-display font-bold text-foreground flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" /> Contas Ativas
+              </p>
               {barberUsers.filter((u) => u.role === "barber").map((u) => {
                 const barber = barbers.find((b) => b.id === u.barber_id);
                 return (
-                  <div key={u.user_id} className="glass-card rounded-xl p-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-foreground text-sm">{barber?.name || "Barbeiro"}</p>
-                      <p className="text-xs text-muted-foreground">Papel: Barbeiro</p>
+                  <div key={u.user_id} className="rounded-2xl bg-secondary/50 border border-border/50 p-4 flex items-center justify-between hover:border-primary/20 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <User className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground text-sm">{barber?.name || "Barbeiro"}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Barbeiro</p>
+                      </div>
                     </div>
-                    <button onClick={() => handleDeleteBarberUser(u.user_id)} className="p-2 rounded-lg hover:bg-secondary text-red-400">
+                    <button onClick={() => handleDeleteBarberUser(u.user_id)} className="p-2.5 rounded-xl hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 );
               })}
               {barberUsers.filter((u) => u.role === "barber").length === 0 && (
-                <p className="text-center text-muted-foreground text-xs py-4">Nenhuma conta de barbeiro criada</p>
+                <div className="text-center py-8 rounded-2xl bg-secondary/30 border border-border/30">
+                  <Shield className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
+                  <p className="text-muted-foreground text-xs">Nenhuma conta de barbeiro criada</p>
+                </div>
               )}
             </div>
           </div>
@@ -703,18 +939,38 @@ const Admin = () => {
 
         {/* SETTINGS TAB */}
         {activeTab === "settings" && (
-          <div className="space-y-4 sm:space-y-6">
-            <div className="glass-card rounded-xl p-4 space-y-3">
-              <p className="font-display font-semibold text-foreground">Alterar Email</p>
-              <input type="email" placeholder="Novo email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-              <button onClick={handleChangeEmail} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Alterar Email</button>
+          <div className="space-y-5">
+            <div className="rounded-2xl bg-secondary/50 border border-border/50 p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Settings className="w-5 h-5 text-primary" />
+                <p className="font-display font-bold text-foreground">Alterar Email</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Novo Email</label>
+                <input type="email" placeholder="novo@email.com" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              <button onClick={handleChangeEmail} className="w-full py-2.5 rounded-xl gold-gradient text-primary-foreground text-sm font-bold shadow-md">Alterar Email</button>
             </div>
-            <div className="glass-card rounded-xl p-4 space-y-3">
-              <p className="font-display font-semibold text-foreground">Alterar Senha</p>
-              <input type="password" placeholder="Senha atual" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-              <input type="password" placeholder="Nova senha (mínimo 6 caracteres)" value={newPw} onChange={(e) => setNewPw(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-              <input type="password" placeholder="Confirmar nova senha" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-secondary text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
-              <button onClick={handleChangePassword} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Alterar Senha</button>
+            <div className="rounded-2xl bg-secondary/50 border border-border/50 p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-primary" />
+                <p className="font-display font-bold text-foreground">Alterar Senha</p>
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Senha Atual</label>
+                  <input type="password" placeholder="••••••••" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Nova Senha</label>
+                  <input type="password" placeholder="Mínimo 6 caracteres" value={newPw} onChange={(e) => setNewPw(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Confirmar Senha</label>
+                  <input type="password" placeholder="••••••••" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+              </div>
+              <button onClick={handleChangePassword} className="w-full py-2.5 rounded-xl gold-gradient text-primary-foreground text-sm font-bold shadow-md">Alterar Senha</button>
             </div>
           </div>
         )}
