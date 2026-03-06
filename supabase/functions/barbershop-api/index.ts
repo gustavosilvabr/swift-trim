@@ -486,8 +486,9 @@ Deno.serve(async (req) => {
       if (!isOwner) return err("Forbidden", 403);
 
       const contentType = req.headers.get("content-type") || "";
-      if (!contentType.includes("multipart/form-data") && !contentType.includes("application/octet-stream")) {
-        return err("Content-Type must be multipart/form-data or application/octet-stream");
+      const validTypes = ["image/", "multipart/form-data", "application/octet-stream"];
+      if (!validTypes.some((t) => contentType.includes(t))) {
+        return err("Content-Type must be an image type (image/jpeg, image/png), multipart/form-data or application/octet-stream");
       }
 
       const bucket = url.searchParams.get("bucket") || "barber-photos";
@@ -503,10 +504,11 @@ Deno.serve(async (req) => {
       const ext = fileName.split(".").pop() || "jpg";
       const path = `${crypto.randomUUID()}.${ext}`;
 
+      const uploadContentType = contentType.startsWith("image/") ? contentType : "application/octet-stream";
       const { error: uploadError } = await admin.storage
         .from(bucket)
         .upload(path, fileData, {
-          contentType: contentType.includes("multipart") ? undefined : contentType,
+          contentType: uploadContentType,
           upsert: true,
         });
 
@@ -540,6 +542,33 @@ Deno.serve(async (req) => {
           specialty: body.specialty || "",
         }).select().single();
         if (error) return err(error.message);
+
+        // Auto-generate time_slots by copying from an existing barber
+        const { data: existingBarber } = await admin
+          .from("barbers")
+          .select("id")
+          .neq("id", data.id)
+          .eq("is_active", true)
+          .limit(1)
+          .single();
+
+        if (existingBarber) {
+          const { data: templateSlots } = await admin
+            .from("time_slots")
+            .select("day_of_week, slot_time, is_active")
+            .eq("barber_id", existingBarber.id);
+
+          if (templateSlots && templateSlots.length > 0) {
+            const newSlots = templateSlots.map((s) => ({
+              barber_id: data.id,
+              day_of_week: s.day_of_week,
+              slot_time: s.slot_time,
+              is_active: s.is_active,
+            }));
+            await admin.from("time_slots").insert(newSlots);
+          }
+        }
+
         return json({ barber: data }, 201);
       }
 
