@@ -504,10 +504,11 @@ Deno.serve(async (req) => {
       const ext = fileName.split(".").pop() || "jpg";
       const path = `${crypto.randomUUID()}.${ext}`;
 
+      const uploadContentType = contentType.startsWith("image/") ? contentType : "application/octet-stream";
       const { error: uploadError } = await admin.storage
         .from(bucket)
         .upload(path, fileData, {
-          contentType: contentType.includes("multipart") ? undefined : contentType,
+          contentType: uploadContentType,
           upsert: true,
         });
 
