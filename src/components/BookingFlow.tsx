@@ -25,9 +25,12 @@ const stepTitles = [
 ];
 
 const BookingFlow = () => {
-  const { barbers, loading } = useBarbers();
+  const { barbers: allBarbers, loading } = useBarbers();
   const { appointments } = useAppointments();
   const { services } = useServices();
+
+  // Only show active barbers in booking
+  const barbers = allBarbers.filter((b) => (b as any).is_active !== false);
 
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
