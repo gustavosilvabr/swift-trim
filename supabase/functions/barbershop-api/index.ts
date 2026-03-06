@@ -486,8 +486,9 @@ Deno.serve(async (req) => {
       if (!isOwner) return err("Forbidden", 403);
 
       const contentType = req.headers.get("content-type") || "";
-      if (!contentType.includes("multipart/form-data") && !contentType.includes("application/octet-stream")) {
-        return err("Content-Type must be multipart/form-data or application/octet-stream");
+      const validTypes = ["image/", "multipart/form-data", "application/octet-stream"];
+      if (!validTypes.some((t) => contentType.includes(t))) {
+        return err("Content-Type must be an image type (image/jpeg, image/png), multipart/form-data or application/octet-stream");
       }
 
       const bucket = url.searchParams.get("bucket") || "barber-photos";
