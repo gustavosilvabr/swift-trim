@@ -148,7 +148,20 @@ Lista agendamentos. Barbeiro vê apenas os seus; Owner vê todos.
 ```json
 {
   "appointments": [
-    { "id": "uuid", "client_name": "Carlos", "appointment_date": "2026-03-15", "appointment_time": "10:00:00", "status": "pendente", "barbers": { "name": "João", "photo_url": "..." }, ... }
+    {
+      "id": "uuid",
+      "client_name": "Carlos",
+      "client_phone": "11999999999",
+      "appointment_date": "2026-03-15",
+      "appointment_time": "10:00:00",
+      "status": "pendente",
+      "service_type": "corte",
+      "total_amount": 35,
+      "products_sold": "",
+      "observation": "",
+      "payment_method": "",
+      "barbers": { "name": "João", "photo_url": "..." }
+    }
   ]
 }
 ```
@@ -157,6 +170,24 @@ Lista agendamentos. Barbeiro vê apenas os seus; Owner vê todos.
 
 ### `GET /appointments/:id` 🔒
 Retorna um agendamento específico.
+
+---
+
+### `POST /appointments` 🔒
+Cria agendamento (autenticado). Envia push notification automaticamente.
+
+**Body:**
+```json
+{
+  "barber_id": "uuid",
+  "client_name": "Carlos",
+  "client_phone": "11999999999",
+  "appointment_date": "2026-03-15",
+  "appointment_time": "10:00:00",
+  "service_type": "corte",
+  "total_amount": 35
+}
+```
 
 ---
 
@@ -230,7 +261,6 @@ async function registerForPushNotifications(accessToken: string) {
     projectId: Constants.expoConfig?.extra?.eas?.projectId,
   })).data;
 
-  // Registrar token na API
   await fetch('BASE_URL/push-tokens', {
     method: 'POST',
     headers: {
@@ -248,9 +278,16 @@ async function registerForPushNotifications(accessToken: string) {
 ## 💰 Financeiro 🔒
 
 ### `GET /financial/summary?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
-Resumo financeiro. Barbeiro vê apenas seu faturamento; Owner vê tudo + despesas.
+Resumo financeiro do período. Barbeiro vê apenas seu faturamento; Owner vê tudo + despesas.
 
-**Response:**
+**Parâmetros:**
+
+| Param | Descrição | Obrigatório |
+|-------|-----------|-------------|
+| `date_from` | Data início (YYYY-MM-DD) | Não (padrão: hoje) |
+| `date_to` | Data fim (YYYY-MM-DD) | Não (padrão: date_from) |
+
+**Response (Owner):**
 ```json
 {
   "period": { "from": "2026-03-01", "to": "2026-03-31" },
@@ -264,22 +301,53 @@ Resumo financeiro. Barbeiro vê apenas seu faturamento; Owner vê tudo + despesa
 }
 ```
 
+**Response (Barber):** Mesmo formato, mas `total_expenses` = 0 e `per_barber` contém apenas os dados do barbeiro logado.
+
 ---
 
-### `GET /financial/expenses?date_from=&date_to=` 🔒 (Owner only)
-Lista despesas.
+### `GET /financial/expenses?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` 🔒 (Owner only)
+Lista despesas do período.
+
+**Response:**
+```json
+{
+  "expenses": [
+    {
+      "id": "uuid",
+      "category": "aluguel",
+      "description": "Aluguel março",
+      "amount": 2000,
+      "expense_date": "2026-03-01",
+      "created_at": "..."
+    }
+  ]
+}
+```
 
 ---
 
 ### `POST /financial/expenses` 🔒 (Owner only)
+Cria uma nova despesa.
+
 **Body:**
 ```json
-{ "category": "aluguel", "description": "Aluguel março", "amount": 2000, "expense_date": "2026-03-01" }
+{
+  "category": "aluguel",
+  "description": "Aluguel março",
+  "amount": 2000,
+  "expense_date": "2026-03-01"
+}
+```
+
+**Response (201):**
+```json
+{ "expense": { "id": "uuid", "category": "aluguel", "amount": 2000, ... } }
 ```
 
 ---
 
 ### `DELETE /financial/expenses/:id` 🔒 (Owner only)
+Exclui uma despesa.
 
 ---
 
@@ -287,7 +355,7 @@ Lista despesas.
 
 ### `POST /upload?bucket=barber-photos&file_name=foto.jpg`
 
-Faz upload de imagem para o storage.
+Faz upload de imagem para o storage. Aceita dados binários da imagem diretamente no body.
 
 | Param | Descrição | Valores |
 |-------|-----------|---------|
@@ -296,16 +364,20 @@ Faz upload de imagem para o storage.
 
 **Headers:**
 ```
-Content-Type: image/jpeg (ou image/png, etc.)
+Content-Type: image/jpeg (ou image/png, image/webp, etc.)
 Authorization: Bearer <token>
 apikey: <anon_key>
 ```
 
-**Body:** Raw binary data da imagem.
+**Body:** Raw binary data da imagem (ArrayBuffer).
 
 **Response (201):**
 ```json
-{ "url": "https://...supabase.co/storage/v1/object/public/barber-photos/uuid.jpg", "path": "uuid.jpg", "bucket": "barber-photos" }
+{
+  "url": "https://...supabase.co/storage/v1/object/public/barber-photos/uuid.jpg",
+  "path": "uuid.jpg",
+  "bucket": "barber-photos"
+}
 ```
 
 ### Exemplo React Native:
@@ -341,10 +413,12 @@ async function uploadPhoto(uri: string, accessToken: string) {
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
 | `GET` | `/manage/barbers` | Lista todos os barbeiros + usuários vinculados |
-| `POST` | `/manage/barbers` | Cria barbeiro `{ name, phone, photo_url?, specialty? }` |
+| `POST` | `/manage/barbers` | Cria barbeiro (auto-gera horários) `{ name, phone, photo_url?, specialty? }` |
 | `PATCH` | `/manage/barbers/:id` | Atualiza barbeiro |
 | `POST` | `/manage/barber-user` | Cria login para barbeiro `{ email, password, barber_id }` |
 | `DELETE` | `/manage/barber-user/:user_id` | Remove login do barbeiro |
+
+> **Nota:** Ao criar um novo barbeiro via `POST /manage/barbers`, os horários de atendimento (time_slots) são automaticamente copiados de um barbeiro existente.
 
 ### Serviços
 
@@ -394,7 +468,6 @@ const api = axios.create({
   headers: { 'apikey': API_KEY, 'Content-Type': 'application/json' },
 });
 
-// Interceptor para adicionar token
 let accessToken: string | null = null;
 
 export function setToken(token: string | null) {
@@ -418,7 +491,6 @@ import api, { setToken } from './api';
 async function login(email: string, password: string) {
   const { data } = await api.post('/auth/login', { email, password });
   setToken(data.access_token);
-  // Salvar refresh_token no AsyncStorage
   return data.user;
 }
 ```
@@ -427,12 +499,37 @@ async function login(email: string, password: string) {
 ```typescript
 // Listar agendamentos do dia
 const { data } = await api.get('/appointments', { params: { date: '2026-03-15' } });
-console.log(data.appointments);
 
 // Resumo financeiro do mês
-const { data } = await api.get('/financial/summary', {
+const { data: finance } = await api.get('/financial/summary', {
   params: { date_from: '2026-03-01', date_to: '2026-03-31' }
 });
+
+// Listar despesas do mês
+const { data: expenses } = await api.get('/financial/expenses', {
+  params: { date_from: '2026-03-01', date_to: '2026-03-31' }
+});
+```
+
+### 5. Exemplo de Upload
+```typescript
+async function uploadBarberPhoto(imageUri: string) {
+  const response = await fetch(imageUri);
+  const blob = await response.blob();
+  
+  const { data } = await axios.post(
+    `${BASE_URL}/upload?bucket=barber-photos&file_name=foto.jpg`,
+    blob,
+    {
+      headers: {
+        'apikey': API_KEY,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'image/jpeg',
+      },
+    }
+  );
+  return data.url;
+}
 ```
 
 ---
@@ -445,10 +542,11 @@ const { data } = await api.get('/financial/summary', {
 | Criar/editar agendamentos | ✅ | ✅ (só os seus) |
 | Deletar agendamentos | ✅ | ❌ |
 | Financeiro completo | ✅ | ❌ (só seu faturamento) |
-| Despesas | ✅ | ❌ |
+| Despesas (CRUD) | ✅ | ❌ |
 | Gestão barbeiros/serviços | ✅ | ❌ |
 | Upload de fotos | ✅ | ❌ |
 | Criar login barbeiro | ✅ | ❌ |
+| Push tokens | ✅ | ✅ (só os seus) |
 
 ---
 
