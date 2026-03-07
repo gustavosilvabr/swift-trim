@@ -24,6 +24,7 @@ interface Props {
   expenses: Expense[];
   setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
   isOwner?: boolean;
+  myBarberId?: string | null;
 }
 
 const FinancialTab = ({ appointments, barbers, expenses, setExpenses, isOwner = true }: Props) => {
