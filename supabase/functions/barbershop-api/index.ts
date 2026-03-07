@@ -420,25 +420,51 @@ Deno.serve(async (req) => {
         const totalRevenue = (appointments || []).reduce((sum, a) => sum + Number(a.total_amount || 0), 0);
         const totalAppointments = (appointments || []).length;
 
-        const barberMap: Record<string, { name: string; revenue: number; count: number }> = {};
+        // Subscription revenue
+        let subQuery = admin.from("subscriptions").select("plan_price, barber_id, barbers(name)").eq("status", "active");
+        if (!isOwner && myBarberId) subQuery = subQuery.eq("barber_id", myBarberId);
+        const { data: activeSubs } = await subQuery;
+        const totalSubRevenue = (activeSubs || []).reduce((sum, s) => sum + Number(s.plan_price || 0), 0);
+        const totalActiveSubscribers = (activeSubs || []).length;
+
+        const barberMap: Record<string, { name: string; revenue: number; count: number; subscribers: number; sub_revenue: number }> = {};
         for (const a of appointments || []) {
           if (!barberMap[a.barber_id]) {
             barberMap[a.barber_id] = {
               name: (a.barbers as any)?.name || "Desconhecido",
               revenue: 0,
               count: 0,
+              subscribers: 0,
+              sub_revenue: 0,
             };
           }
           barberMap[a.barber_id].revenue += Number(a.total_amount || 0);
           barberMap[a.barber_id].count += 1;
         }
 
+        // Add subscription data to barber map
+        for (const s of activeSubs || []) {
+          if (!barberMap[s.barber_id]) {
+            barberMap[s.barber_id] = {
+              name: (s.barbers as any)?.name || "Desconhecido",
+              revenue: 0,
+              count: 0,
+              subscribers: 0,
+              sub_revenue: 0,
+            };
+          }
+          barberMap[s.barber_id].subscribers += 1;
+          barberMap[s.barber_id].sub_revenue += Number(s.plan_price || 0);
+        }
+
         return json({
           period: { from: dateFrom, to: dateTo },
           total_revenue: totalRevenue,
           total_expenses: totalExpenses,
-          profit: totalRevenue - totalExpenses,
+          profit: totalRevenue + totalSubRevenue - totalExpenses,
           total_appointments: totalAppointments,
+          total_subscription_revenue: totalSubRevenue,
+          total_active_subscribers: totalActiveSubscribers,
           per_barber: Object.entries(barberMap).map(([id, data]) => ({
             barber_id: id,
             ...data,
