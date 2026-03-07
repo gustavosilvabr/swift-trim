@@ -27,7 +27,7 @@ interface Props {
   myBarberId?: string | null;
 }
 
-const FinancialTab = ({ appointments, barbers, expenses, setExpenses, isOwner = true }: Props) => {
+const FinancialTab = ({ appointments, barbers, expenses, setExpenses, isOwner = true, myBarberId }: Props) => {
   const [dateFilter, setDateFilter] = useState<DateFilter>("month");
   const [customStart, setCustomStart] = useState(format(new Date(), "yyyy-MM-dd"));
   const [customEnd, setCustomEnd] = useState(format(new Date(), "yyyy-MM-dd"));
