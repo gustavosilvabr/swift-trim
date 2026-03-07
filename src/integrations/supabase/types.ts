@@ -297,6 +297,53 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          barber_id: string
+          client_name: string
+          client_phone: string
+          created_at: string
+          end_date: string
+          id: string
+          plan_name: string
+          plan_price: number
+          start_date: string
+          status: string
+        }
+        Insert: {
+          barber_id: string
+          client_name: string
+          client_phone: string
+          created_at?: string
+          end_date?: string
+          id?: string
+          plan_name?: string
+          plan_price?: number
+          start_date?: string
+          status?: string
+        }
+        Update: {
+          barber_id?: string
+          client_name?: string
+          client_phone?: string
+          created_at?: string
+          end_date?: string
+          id?: string
+          plan_name?: string
+          plan_price?: number
+          start_date?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_barber_id_fkey"
+            columns: ["barber_id"]
+            isOneToOne: false
+            referencedRelation: "barbers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_slots: {
         Row: {
           barber_id: string
