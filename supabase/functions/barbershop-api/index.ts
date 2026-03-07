@@ -479,6 +479,75 @@ Deno.serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════
+    // SUBSCRIPTIONS (Plans)
+    // ═══════════════════════════════════════════
+
+    if (resource === "subscriptions") {
+      const admin = adminClient();
+
+      // GET /subscriptions - list subscriptions (filtered by role)
+      if (method === "GET" && !subResource) {
+        let query = admin.from("subscriptions").select("*, barbers(name)").order("created_at", { ascending: false });
+        if (!isOwner && myBarberId) query = query.eq("barber_id", myBarberId);
+
+        const statusFilter = url.searchParams.get("status");
+        if (statusFilter) query = query.eq("status", statusFilter);
+
+        const { data, error } = await query;
+        if (error) return err(error.message);
+
+        const activeSubs = (data || []).filter((s: any) => s.status === "active");
+        const totalPlanRevenue = activeSubs.reduce((sum: number, s: any) => sum + Number(s.plan_price || 0), 0);
+
+        return json({
+          subscriptions: data,
+          summary: {
+            total: (data || []).length,
+            active: activeSubs.length,
+            total_plan_revenue: totalPlanRevenue,
+          },
+        });
+      }
+
+      // POST /subscriptions - create subscription (public or authenticated)
+      if (method === "POST") {
+        const body = await req.json();
+        if (!body.client_name || !body.client_phone || !body.barber_id) {
+          return err("Missing required fields: client_name, client_phone, barber_id");
+        }
+
+        const { data, error } = await admin.from("subscriptions").insert({
+          client_name: body.client_name,
+          client_phone: body.client_phone,
+          barber_id: body.barber_id,
+          plan_name: body.plan_name || "Corte Ilimitado",
+          plan_price: body.plan_price || 100,
+          status: "active",
+        }).select().single();
+
+        if (error) return err(error.message);
+        return json({ subscription: data }, 201);
+      }
+
+      // PATCH /subscriptions/:id - update status
+      if (method === "PATCH" && subResource) {
+        if (!isOwner) return err("Forbidden", 403);
+        const body = await req.json();
+        const { data, error } = await admin.from("subscriptions").update(body).eq("id", subResource).select().single();
+        if (error) return err(error.message);
+        return json({ subscription: data });
+      }
+
+      // DELETE /subscriptions/:id
+      if (method === "DELETE" && subResource) {
+        if (!isOwner) return err("Forbidden", 403);
+        const { error } = await admin.from("subscriptions").delete().eq("id", subResource);
+        if (error) return err(error.message);
+        return json({ success: true });
+      }
+    }
+
+    // ═══════════════════════════════════════════
     // UPLOAD (photos)
     // ═══════════════════════════════════════════
 
