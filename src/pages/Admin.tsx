@@ -753,6 +753,7 @@ const Admin = () => {
             expenses={expenses}
             setExpenses={setExpenses}
             isOwner={isOwner}
+            myBarberId={myBarberId}
           />
         )}
 
