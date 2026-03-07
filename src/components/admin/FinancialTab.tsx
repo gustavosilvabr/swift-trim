@@ -254,6 +254,17 @@ const FinancialTab = ({ appointments, barbers, expenses, setExpenses, isOwner = 
           </div>
         </div>
       )}
+      {/* Subscribers Section */}
+      <div className="glass-card rounded-xl p-3 sm:p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Crown className="w-4 h-4 text-primary" />
+          <p className="font-display font-semibold text-foreground text-sm">Plano Corte Ilimitado</p>
+        </div>
+        <SubscribersSection
+          barbers={barbers}
+          barberId={isOwner ? undefined : (myBarberId || undefined)}
+        />
+      </div>
     </div>
   );
 };
