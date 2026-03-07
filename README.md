@@ -49,7 +49,7 @@ Lista serviços ativos.
 ---
 
 ### `GET /timeslots?barber_id=UUID&date=YYYY-MM-DD`
-Retorna horários disponíveis para agendamento. Horários passados, ocupados e bloqueados são filtrados automaticamente.
+Retorna horários disponíveis para agendamento.
 
 **Response:**
 ```json
@@ -74,17 +74,11 @@ Cria agendamento (cliente, sem login). Envia push notification automaticamente.
 }
 ```
 
-**Response (201):**
-```json
-{ "appointment": { "id": "uuid", "status": "pendente", ... } }
-```
-
 ---
 
 ## 🔐 Autenticação
 
 ### `POST /auth/login`
-**Body:**
 ```json
 { "email": "barbeiro@email.com", "password": "123456" }
 ```
@@ -99,33 +93,15 @@ Cria agendamento (cliente, sem login). Envia push notification automaticamente.
 }
 ```
 
----
-
 ### `POST /auth/refresh`
-**Body:**
 ```json
 { "refresh_token": "abc..." }
 ```
 
-**Response:**
-```json
-{ "access_token": "new_token", "refresh_token": "new_refresh", "expires_at": 1234567890 }
-```
-
----
-
 ### `GET /auth/me` 🔒
 Retorna dados do usuário logado.
 
-**Response:**
-```json
-{ "user": { "id": "uuid", "email": "...", "role": "owner", "barber_id": "uuid|null" } }
-```
-
----
-
 ### `POST /auth/update-password` 🔒
-**Body:**
 ```json
 { "password": "novaSenha123" }
 ```
@@ -135,142 +111,105 @@ Retorna dados do usuário logado.
 ## 📅 Agendamentos (Autenticado) 🔒
 
 ### `GET /appointments`
-Lista agendamentos. Barbeiro vê apenas os seus; Owner vê todos.
-
 | Param | Descrição |
 |-------|-----------|
-| `date` | Filtrar por data exata (YYYY-MM-DD) |
+| `date` | Data exata (YYYY-MM-DD) |
 | `date_from` | Data início |
 | `date_to` | Data fim |
 | `status` | `pendente`, `confirmado`, `concluido`, `cancelado` |
 
+### `GET /appointments/:id` 🔒
+### `POST /appointments` 🔒 (com push notification)
+### `PATCH /appointments/:id` 🔒
+Campos: `status`, `service_type`, `total_amount`, `products_sold`, `observation`, `payment_method`
+
+### `DELETE /appointments/:id` 🔒 (Owner only)
+
+---
+
+## 👑 Planos / Assinaturas (Corte Ilimitado)
+
+### `GET /subscriptions` 🔒
+Lista assinaturas. Barbeiro vê apenas as suas; Owner vê todas.
+
+| Param | Descrição |
+|-------|-----------|
+| `status` | Filtrar por status: `active`, `inactive`, `cancelled` |
+
 **Response:**
 ```json
 {
-  "appointments": [
+  "subscriptions": [
     {
       "id": "uuid",
       "client_name": "Carlos",
       "client_phone": "11999999999",
-      "appointment_date": "2026-03-15",
-      "appointment_time": "10:00:00",
-      "status": "pendente",
-      "service_type": "corte",
-      "total_amount": 35,
-      "products_sold": "",
-      "observation": "",
-      "payment_method": "",
-      "barbers": { "name": "João", "photo_url": "..." }
+      "barber_id": "uuid",
+      "plan_name": "Corte Ilimitado",
+      "plan_price": 100,
+      "status": "active",
+      "start_date": "2026-03-07",
+      "end_date": "2026-04-06",
+      "created_at": "...",
+      "barbers": { "name": "João" }
     }
-  ]
+  ],
+  "summary": {
+    "total": 5,
+    "active": 3,
+    "total_plan_revenue": 300
+  }
 }
 ```
 
 ---
 
-### `GET /appointments/:id` 🔒
-Retorna um agendamento específico.
-
----
-
-### `POST /appointments` 🔒
-Cria agendamento (autenticado). Envia push notification automaticamente.
+### `POST /subscriptions`
+Cria assinatura (público ou autenticado).
 
 **Body:**
 ```json
 {
-  "barber_id": "uuid",
   "client_name": "Carlos",
   "client_phone": "11999999999",
-  "appointment_date": "2026-03-15",
-  "appointment_time": "10:00:00",
-  "service_type": "corte",
-  "total_amount": 35
+  "barber_id": "uuid",
+  "plan_name": "Corte Ilimitado",
+  "plan_price": 100
 }
 ```
 
----
-
-### `PATCH /appointments/:id` 🔒
-Atualiza agendamento.
-
-**Body (campos opcionais):**
+**Response (201):**
 ```json
-{
-  "status": "confirmado",
-  "service_type": "corte + barba",
-  "total_amount": 55,
-  "payment_method": "pix",
-  "observation": "Cliente VIP",
-  "products_sold": "Pomada"
-}
+{ "subscription": { "id": "uuid", "status": "active", ... } }
 ```
 
 ---
 
-### `DELETE /appointments/:id` 🔒 (Owner only)
-Exclui agendamento.
+### `PATCH /subscriptions/:id` 🔒 (Owner only)
+Atualiza assinatura (ex: desativar).
+
+**Body:**
+```json
+{ "status": "inactive" }
+```
+
+---
+
+### `DELETE /subscriptions/:id` 🔒 (Owner only)
+Remove assinatura.
 
 ---
 
 ## 📱 Push Notifications 🔒
 
 ### `POST /push-tokens`
-Registra token de push notification (Expo Push Token).
-
-**Body:**
 ```json
-{
-  "token": "ExponentPushToken[xxxxxx]",
-  "device_info": "iPhone 15 Pro"
-}
+{ "token": "ExponentPushToken[xxxxxx]", "device_info": "iPhone 15 Pro" }
 ```
-
-**Response (201):**
-```json
-{ "push_token": { "id": "uuid", "token": "...", "user_id": "..." } }
-```
-
----
 
 ### `DELETE /push-tokens` 🔒
-Remove token de push (logout/desinstalar).
-
-**Body:**
 ```json
 { "token": "ExponentPushToken[xxxxxx]" }
-```
-
----
-
-### 🔔 Quando as notificações são enviadas?
-- Automaticamente ao criar um novo agendamento (público ou autenticado)
-- Enviadas para: o barbeiro específico + todos os owners
-- Usa a API do **Expo Push Notifications** (compatível com React Native/Expo)
-
-### Configuração no React Native (Expo):
-```typescript
-import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
-
-async function registerForPushNotifications(accessToken: string) {
-  const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') return;
-
-  const token = (await Notifications.getExpoPushTokenAsync({
-    projectId: Constants.expoConfig?.extra?.eas?.projectId,
-  })).data;
-
-  await fetch('BASE_URL/push-tokens', {
-    method: 'POST',
-    headers: {
-      'apikey': 'SUA_ANON_KEY',
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ token, device_info: Constants.deviceName }),
-  });
-}
 ```
 
 ---
@@ -278,14 +217,7 @@ async function registerForPushNotifications(accessToken: string) {
 ## 💰 Financeiro 🔒
 
 ### `GET /financial/summary?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
-Resumo financeiro do período. Barbeiro vê apenas seu faturamento; Owner vê tudo + despesas.
-
-**Parâmetros:**
-
-| Param | Descrição | Obrigatório |
-|-------|-----------|-------------|
-| `date_from` | Data início (YYYY-MM-DD) | Não (padrão: hoje) |
-| `date_to` | Data fim (YYYY-MM-DD) | Não (padrão: date_from) |
+Resumo financeiro do período. Inclui receita de assinaturas.
 
 **Response (Owner):**
 ```json
@@ -293,32 +225,18 @@ Resumo financeiro do período. Barbeiro vê apenas seu faturamento; Owner vê tu
   "period": { "from": "2026-03-01", "to": "2026-03-31" },
   "total_revenue": 3500,
   "total_expenses": 800,
-  "profit": 2700,
+  "total_subscription_revenue": 300,
+  "total_active_subscribers": 3,
+  "profit": 3000,
   "total_appointments": 100,
   "per_barber": [
-    { "barber_id": "uuid", "name": "João", "revenue": 2000, "count": 57 }
-  ]
-}
-```
-
-**Response (Barber):** Mesmo formato, mas `total_expenses` = 0 e `per_barber` contém apenas os dados do barbeiro logado.
-
----
-
-### `GET /financial/expenses?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` 🔒 (Owner only)
-Lista despesas do período.
-
-**Response:**
-```json
-{
-  "expenses": [
     {
-      "id": "uuid",
-      "category": "aluguel",
-      "description": "Aluguel março",
-      "amount": 2000,
-      "expense_date": "2026-03-01",
-      "created_at": "..."
+      "barber_id": "uuid",
+      "name": "João",
+      "revenue": 2000,
+      "count": 57,
+      "subscribers": 2,
+      "sub_revenue": 200
     }
   ]
 }
@@ -326,28 +244,14 @@ Lista despesas do período.
 
 ---
 
+### `GET /financial/expenses?date_from=&date_to=` 🔒 (Owner only)
+
 ### `POST /financial/expenses` 🔒 (Owner only)
-Cria uma nova despesa.
-
-**Body:**
 ```json
-{
-  "category": "aluguel",
-  "description": "Aluguel março",
-  "amount": 2000,
-  "expense_date": "2026-03-01"
-}
+{ "category": "aluguel", "description": "Aluguel março", "amount": 2000, "expense_date": "2026-03-01" }
 ```
-
-**Response (201):**
-```json
-{ "expense": { "id": "uuid", "category": "aluguel", "amount": 2000, ... } }
-```
-
----
 
 ### `DELETE /financial/expenses/:id` 🔒 (Owner only)
-Exclui uma despesa.
 
 ---
 
@@ -355,54 +259,12 @@ Exclui uma despesa.
 
 ### `POST /upload?bucket=barber-photos&file_name=foto.jpg`
 
-Faz upload de imagem para o storage. Aceita dados binários da imagem diretamente no body.
+| Param | Valores |
+|-------|---------|
+| `bucket` | `barber-photos`, `gallery`, `site-assets` |
+| `file_name` | Ex: `foto.jpg` |
 
-| Param | Descrição | Valores |
-|-------|-----------|---------|
-| `bucket` | Bucket de destino | `barber-photos`, `gallery`, `site-assets` |
-| `file_name` | Nome do arquivo | Ex: `foto.jpg` |
-
-**Headers:**
-```
-Content-Type: image/jpeg (ou image/png, image/webp, etc.)
-Authorization: Bearer <token>
-apikey: <anon_key>
-```
-
-**Body:** Raw binary data da imagem (ArrayBuffer).
-
-**Response (201):**
-```json
-{
-  "url": "https://...supabase.co/storage/v1/object/public/barber-photos/uuid.jpg",
-  "path": "uuid.jpg",
-  "bucket": "barber-photos"
-}
-```
-
-### Exemplo React Native:
-```typescript
-async function uploadPhoto(uri: string, accessToken: string) {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-
-  const result = await fetch(
-    'BASE_URL/upload?bucket=barber-photos&file_name=foto.jpg',
-    {
-      method: 'POST',
-      headers: {
-        'apikey': 'SUA_ANON_KEY',
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'image/jpeg',
-      },
-      body: blob,
-    }
-  );
-
-  const data = await result.json();
-  return data.url; // URL pública da foto
-}
-```
+**Headers:** `Content-Type: image/jpeg` | **Body:** Raw binary data
 
 ---
 
@@ -412,51 +274,41 @@ async function uploadPhoto(uri: string, accessToken: string) {
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| `GET` | `/manage/barbers` | Lista todos os barbeiros + usuários vinculados |
-| `POST` | `/manage/barbers` | Cria barbeiro (auto-gera horários) `{ name, phone, photo_url?, specialty? }` |
+| `GET` | `/manage/barbers` | Lista todos + usuários vinculados |
+| `POST` | `/manage/barbers` | Cria barbeiro (auto-gera horários) |
 | `PATCH` | `/manage/barbers/:id` | Atualiza barbeiro |
-| `POST` | `/manage/barber-user` | Cria login para barbeiro `{ email, password, barber_id }` |
-| `DELETE` | `/manage/barber-user/:user_id` | Remove login do barbeiro |
-
-> **Nota:** Ao criar um novo barbeiro via `POST /manage/barbers`, os horários de atendimento (time_slots) são automaticamente copiados de um barbeiro existente.
+| `POST` | `/manage/barber-user` | Cria login `{ email, password, barber_id }` |
+| `DELETE` | `/manage/barber-user/:user_id` | Remove login |
 
 ### Serviços
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
 | `GET` | `/manage/services` | Lista todos (incluindo inativos) |
-| `POST` | `/manage/services` | Cria serviço `{ name, price, category?, sort_order? }` |
-| `PATCH` | `/manage/services/:id` | Atualiza serviço |
-| `DELETE` | `/manage/services/:id` | Remove serviço |
+| `POST` | `/manage/services` | Cria serviço |
+| `PATCH` | `/manage/services/:id` | Atualiza |
+| `DELETE` | `/manage/services/:id` | Remove |
 
 ### Horários
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| `GET` | `/manage/timeslots?barber_id=UUID` | Lista horários configurados |
-| `POST` | `/manage/timeslots` | Cria horário `{ barber_id, day_of_week (0-6), slot_time }` |
-| `DELETE` | `/manage/timeslots/:id` | Remove horário |
+| `GET` | `/manage/timeslots?barber_id=UUID` | Lista horários |
+| `POST` | `/manage/timeslots` | Cria horário |
+| `DELETE` | `/manage/timeslots/:id` | Remove |
 
 ### Bloqueios
 
 | Método | Endpoint | Descrição |
 |--------|----------|-----------|
-| `POST` | `/manage/blocked-slots` | Bloqueia horário/dia `{ barber_id, blocked_date, blocked_time? }` |
+| `POST` | `/manage/blocked-slots` | Bloqueia horário/dia |
 | `DELETE` | `/manage/blocked-slots/:id` | Remove bloqueio |
 
 ---
 
 ## 🚀 Guia Rápido React Native
 
-### 1. Instalar dependências
-```bash
-npx create-expo-app BarbeariaApp
-cd BarbeariaApp
-npx expo install expo-notifications expo-constants
-npm install @react-navigation/native @react-navigation/native-stack axios
-```
-
-### 2. Criar serviço API (`src/services/api.ts`)
+### 1. Criar serviço API (`src/services/api.ts`)
 ```typescript
 import axios from 'axios';
 
@@ -475,61 +327,33 @@ export function setToken(token: string | null) {
 }
 
 api.interceptors.request.use((config) => {
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`;
-  }
+  if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
   return config;
 });
 
 export default api;
 ```
 
-### 3. Exemplo de Login
+### 2. Exemplos de uso
 ```typescript
-import api, { setToken } from './api';
+// Login
+const { data } = await api.post('/auth/login', { email, password });
+setToken(data.access_token);
 
-async function login(email: string, password: string) {
-  const { data } = await api.post('/auth/login', { email, password });
-  setToken(data.access_token);
-  return data.user;
-}
-```
+// Listar assinaturas
+const { data: subs } = await api.get('/subscriptions');
 
-### 4. Exemplo de Listagem
-```typescript
-// Listar agendamentos do dia
-const { data } = await api.get('/appointments', { params: { date: '2026-03-15' } });
+// Criar assinatura
+await api.post('/subscriptions', {
+  client_name: 'Carlos',
+  client_phone: '11999999999',
+  barber_id: 'uuid',
+});
 
-// Resumo financeiro do mês
+// Resumo financeiro (inclui assinaturas)
 const { data: finance } = await api.get('/financial/summary', {
   params: { date_from: '2026-03-01', date_to: '2026-03-31' }
 });
-
-// Listar despesas do mês
-const { data: expenses } = await api.get('/financial/expenses', {
-  params: { date_from: '2026-03-01', date_to: '2026-03-31' }
-});
-```
-
-### 5. Exemplo de Upload
-```typescript
-async function uploadBarberPhoto(imageUri: string) {
-  const response = await fetch(imageUri);
-  const blob = await response.blob();
-  
-  const { data } = await axios.post(
-    `${BASE_URL}/upload?bucket=barber-photos&file_name=foto.jpg`,
-    blob,
-    {
-      headers: {
-        'apikey': API_KEY,
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'image/jpeg',
-      },
-    }
-  );
-  return data.url;
-}
 ```
 
 ---
@@ -541,6 +365,8 @@ async function uploadBarberPhoto(imageUri: string) {
 | Ver todos agendamentos | ✅ | ❌ (só os seus) |
 | Criar/editar agendamentos | ✅ | ✅ (só os seus) |
 | Deletar agendamentos | ✅ | ❌ |
+| Assinaturas (ver todas) | ✅ | ❌ (só as suas) |
+| Assinaturas (gerenciar) | ✅ | ❌ |
 | Financeiro completo | ✅ | ❌ (só seu faturamento) |
 | Despesas (CRUD) | ✅ | ❌ |
 | Gestão barbeiros/serviços | ✅ | ❌ |
