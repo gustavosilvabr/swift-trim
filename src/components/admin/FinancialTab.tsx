@@ -2,10 +2,11 @@ import { useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, startOfYear, endOfYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Edit2, Trash2, Calendar, TrendingUp, TrendingDown, DollarSign, Users } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, TrendingUp, TrendingDown, DollarSign, Users, Crown } from "lucide-react";
 import { toast } from "sonner";
 import { Appointment } from "@/hooks/useSupabase";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import SubscribersSection from "./SubscribersSection";
 
 interface Expense {
   id: string;
