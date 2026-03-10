@@ -24,14 +24,16 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export function showAppointmentNotification(clientName: string, service: string, time: string) {
   if (Notification.permission !== "granted") return;
 
-  const notification = new Notification("📅 Novo Agendamento!", {
+  const options: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
     body: `Cliente: ${clientName}\nServiço: ${service}\nHorário: ${time}`,
     icon: "/pwa-icon-192.png",
     badge: "/pwa-icon-192.png",
     tag: "new-appointment",
     renotify: true,
     vibrate: [200, 100, 200],
-  });
+  };
+
+  const notification = new Notification("📅 Novo Agendamento!", options as NotificationOptions);
 
   notification.onclick = () => {
     window.focus();
