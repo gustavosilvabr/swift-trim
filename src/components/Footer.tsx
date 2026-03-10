@@ -1,4 +1,4 @@
-import { CreditCard, Smartphone, Banknote, Clock, MapPin } from "lucide-react";
+import { CreditCard, Smartphone, Banknote, Clock, MapPin, Download, Lock } from "lucide-react";
 
 const paymentMethods = [
   { icon: Smartphone, label: "Pix" },
