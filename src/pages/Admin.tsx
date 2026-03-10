@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAppointments, useBarbers, Appointment } from "@/hooks/useSupabase";
+import { requestNotificationPermission, showAppointmentNotification, isNotificationSupported } from "@/hooks/usePushNotifications";
 import { format, parseISO, startOfDay, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -80,6 +81,39 @@ const Admin = () => {
   const [barberUsers, setBarberUsers] = useState<{ user_id: string; barber_id: string | null; role: string }[]>([]);
 
   const [deletingBarber, setDeletingBarber] = useState<string | null>(null);
+
+  const prevAppointmentCount = useRef<number | null>(null);
+
+  // Request notification permission on login
+  useEffect(() => {
+    if (session && isNotificationSupported()) {
+      requestNotificationPermission();
+    }
+  }, [session]);
+
+  // Listen for new appointments via realtime and show browser notification
+  useEffect(() => {
+    if (!session) return;
+
+    const channel = supabase
+      .channel("admin-push-notifications")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "appointments" },
+        (payload) => {
+          const apt = payload.new as any;
+          const barberName = barbers.find(b => b.id === apt.barber_id)?.name || "Barbeiro";
+          showAppointmentNotification(
+            apt.client_name,
+            apt.service_type || "Corte",
+            `${apt.appointment_date} às ${apt.appointment_time?.slice(0, 5)}`
+          );
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session, barbers]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
