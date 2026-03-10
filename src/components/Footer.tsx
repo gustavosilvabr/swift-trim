@@ -1,4 +1,4 @@
-import { CreditCard, Smartphone, Banknote, Clock, MapPin } from "lucide-react";
+import { CreditCard, Smartphone, Banknote, Clock, MapPin, Download, Lock } from "lucide-react";
 
 const paymentMethods = [
   { icon: Smartphone, label: "Pix" },
@@ -44,6 +44,27 @@ const Footer = () => {
             <MapPin className="w-3.5 h-3.5 text-primary/70" />
             <span className="text-[10px]">Águas Lindas - GO</span>
           </div>
+        </div>
+
+        {/* Discrete Links - App & Admin */}
+        <div className="flex items-center justify-center gap-4 pt-2">
+          <a
+            href="https://expo.dev/artifacts/eas/svcVU6ipB6LuBjq5jLEQny.apk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 hover:text-primary/70 transition-colors"
+          >
+            <Download className="w-3 h-3" />
+            <span>App Android</span>
+          </a>
+          <span className="text-muted-foreground/30">|</span>
+          <a
+            href="/admin"
+            className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 hover:text-primary/70 transition-colors"
+          >
+            <Lock className="w-3 h-3" />
+            <span>Admin</span>
+          </a>
         </div>
 
         <p className="text-center text-[10px] text-muted-foreground/60">
