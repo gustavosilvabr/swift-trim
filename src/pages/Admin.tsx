@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useAppointments, useBarbers, Appointment } from "@/hooks/useSupabase";
+import { requestNotificationPermission, showAppointmentNotification, isNotificationSupported } from "@/hooks/usePushNotifications";
 import { format, parseISO, startOfDay, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
