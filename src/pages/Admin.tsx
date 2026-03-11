@@ -16,6 +16,7 @@ import FinancialTab from "@/components/admin/FinancialTab";
 import WorkingHoursManager from "@/components/admin/WorkingHoursManager";
 import ServicesManager from "@/components/admin/ServicesManager";
 import UpcomingAppointments from "@/components/admin/UpcomingAppointments";
+import AddBarberDrawer from "@/components/admin/AddBarberDrawer";
 
 type Session = Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"];
 
