@@ -53,8 +53,7 @@ const Admin = () => {
   const [editingBarber, setEditingBarber] = useState<string | null>(null);
   const [barberName, setBarberName] = useState("");
   const [barberPhone, setBarberPhone] = useState("");
-  const [barberSpecialty, setBarberSpecialty] = useState("");
-  const [barberPrice, setBarberPrice] = useState("");
+  const [barberActive, setBarberActive] = useState(true);
   const [barberActive, setBarberActive] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("appointments");
 
