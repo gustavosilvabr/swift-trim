@@ -214,8 +214,6 @@ const Admin = () => {
     const updates: Record<string, unknown> = {};
     if (barberName.trim()) updates.name = barberName.trim();
     if (barberPhone.trim()) updates.phone = barberPhone.trim();
-    updates.specialty = barberSpecialty.trim();
-    updates.default_price = parseFloat(barberPrice) || 0;
     updates.is_active = barberActive;
     await supabase.from("barbers").update(updates).eq("id", id);
     toast.success("Barbeiro atualizado");
