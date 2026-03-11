@@ -54,7 +54,6 @@ const Admin = () => {
   const [barberName, setBarberName] = useState("");
   const [barberPhone, setBarberPhone] = useState("");
   const [barberActive, setBarberActive] = useState(true);
-  const [barberActive, setBarberActive] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("appointments");
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
