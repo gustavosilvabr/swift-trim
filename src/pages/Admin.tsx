@@ -16,6 +16,7 @@ import FinancialTab from "@/components/admin/FinancialTab";
 import WorkingHoursManager from "@/components/admin/WorkingHoursManager";
 import ServicesManager from "@/components/admin/ServicesManager";
 import UpcomingAppointments from "@/components/admin/UpcomingAppointments";
+import AddBarberDrawer from "@/components/admin/AddBarberDrawer";
 
 type Session = Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"];
 
@@ -52,8 +53,6 @@ const Admin = () => {
   const [editingBarber, setEditingBarber] = useState<string | null>(null);
   const [barberName, setBarberName] = useState("");
   const [barberPhone, setBarberPhone] = useState("");
-  const [barberSpecialty, setBarberSpecialty] = useState("");
-  const [barberPrice, setBarberPrice] = useState("");
   const [barberActive, setBarberActive] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("appointments");
 
@@ -213,8 +212,6 @@ const Admin = () => {
     const updates: Record<string, unknown> = {};
     if (barberName.trim()) updates.name = barberName.trim();
     if (barberPhone.trim()) updates.phone = barberPhone.trim();
-    updates.specialty = barberSpecialty.trim();
-    updates.default_price = parseFloat(barberPrice) || 0;
     updates.is_active = barberActive;
     await supabase.from("barbers").update(updates).eq("id", id);
     toast.success("Barbeiro atualizado");
@@ -670,6 +667,14 @@ const Admin = () => {
         {/* BARBERS TAB - owner only */}
         {activeTab === "barbers" && isOwner && (
           <div className="space-y-4">
+            {/* Add barber drawer */}
+            <AddBarberDrawer barbers={barbers} onCreated={() => {
+              // Refresh barber users list
+              supabase.from("user_roles").select("user_id, barber_id, role").then(({ data }) => {
+                if (data) setBarberUsers(data);
+              });
+            }} />
+
             <div className="rounded-2xl bg-secondary/50 border border-border/50 p-5 space-y-3">
               <div className="flex items-center gap-2">
                 <Image className="w-5 h-5 text-primary" />
@@ -683,48 +688,46 @@ const Admin = () => {
 
             {barbers.map((b) => {
               const isInactive = (b as any).is_active === false;
+              const barberUser = barberUsers.find((u) => u.barber_id === b.id);
               return (
-                <div key={b.id} className={`rounded-2xl border p-5 space-y-4 transition-all ${
+                <div key={b.id} className={`rounded-2xl border p-4 space-y-3 transition-all ${
                   isInactive
                     ? "bg-secondary/20 border-border/30 opacity-60"
                     : "bg-secondary/50 border-border/50"
                 }`}>
-                  <div className="flex items-center gap-4">
-                    <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 flex-shrink-0 ${isInactive ? "border-border/50" : "border-primary/30"}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-xl overflow-hidden border-2 flex-shrink-0 ${isInactive ? "border-border/50" : "border-primary/30"}`}>
                       {b.photo_url ? (
                         <img src={b.photo_url} alt={b.name} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full bg-secondary flex items-center justify-center">
-                          <User className="w-6 h-6 text-muted-foreground" />
+                          <User className="w-5 h-5 text-muted-foreground" />
                         </div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="font-display font-bold text-foreground">{b.name}</p>
+                        <p className="font-display font-bold text-foreground text-sm">{b.name}</p>
                         {isInactive && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-semibold uppercase">Inativo</span>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">{b.phone}</p>
+                      <p className="text-xs text-muted-foreground truncate">{b.phone}</p>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 flex-shrink-0">
                       <button onClick={() => {
                         setEditingBarber(editingBarber === b.id ? null : b.id);
                         setBarberName(b.name); setBarberPhone(b.phone);
-                        setBarberSpecialty((b as any).specialty || ""); setBarberPrice(String((b as any).default_price || ""));
                         setBarberActive((b as any).is_active !== false);
-                      }} className="p-2.5 rounded-xl hover:bg-background/50 transition-colors">
+                      }} className="p-2 rounded-xl hover:bg-background/50 transition-colors">
                         <Edit2 className="w-4 h-4 text-muted-foreground" />
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm(`Excluir ${b.name} e todo o histórico de agendamentos? Esta ação é irreversível!`)) {
-                            deleteBarber(b.id);
-                          }
+                          if (confirm(`Excluir ${b.name} e todo o histórico? Irreversível!`)) deleteBarber(b.id);
                         }}
                         disabled={deletingBarber === b.id}
-                        className="p-2.5 rounded-xl hover:bg-red-500/10 transition-colors group disabled:opacity-50"
+                        className="p-2 rounded-xl hover:bg-red-500/10 transition-colors group disabled:opacity-50"
                       >
                         {deletingBarber === b.id ? (
                           <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
@@ -734,42 +737,35 @@ const Admin = () => {
                       </button>
                     </div>
                   </div>
+
                   {editingBarber === b.id && (
                     <div className="space-y-3 pt-3 border-t border-border/50 animate-fade-in">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Nome</label>
-                        <input type="text" value={barberName} onChange={(e) => setBarberName(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">WhatsApp</label>
-                        <input type="tel" value={barberPhone} onChange={(e) => setBarberPhone(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
-                      </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Especialidade</label>
-                          <input type="text" value={barberSpecialty} onChange={(e) => setBarberSpecialty(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Nome</label>
+                          <input type="text" value={barberName} onChange={(e) => setBarberName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Valor Padrão</label>
-                          <input type="number" value={barberPrice} onChange={(e) => setBarberPrice(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
+                          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">WhatsApp</label>
+                          <input type="tel" value={barberPhone} onChange={(e) => setBarberPhone(e.target.value)} className="w-full px-3 py-2.5 rounded-xl bg-background/50 text-foreground text-sm border border-border focus:ring-2 focus:ring-primary outline-none" />
                         </div>
                       </div>
-                      <label className="flex items-center gap-3 py-2 text-sm text-foreground cursor-pointer">
+                      <label className="flex items-center gap-3 py-1 text-sm text-foreground cursor-pointer">
                         <div className={`w-10 h-6 rounded-full relative transition-colors ${barberActive ? "bg-green-500" : "bg-secondary"}`}
                           onClick={() => setBarberActive(!barberActive)}>
                           <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${barberActive ? "left-5" : "left-1"}`} />
                         </div>
-                        <span className="font-medium">{barberActive ? "Ativo" : "Inativo"}</span>
+                        <span className="font-medium text-sm">{barberActive ? "Ativo" : "Inativo"}</span>
                       </label>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Alterar Foto</label>
-                        <label className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer text-sm text-muted-foreground hover:text-foreground">
-                          <Upload className="w-4 h-4" /> Escolher foto
+                        <label className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-colors cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                          <Upload className="w-3.5 h-3.5" /> Escolher foto
                           <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(b.id, f); }} className="hidden" />
                         </label>
                       </div>
                       <button onClick={() => updateBarber(b.id)} className="w-full py-2.5 rounded-xl gold-gradient text-primary-foreground text-sm font-bold shadow-md hover:opacity-90 transition-all">
-                        Salvar Alterações
+                        Salvar
                       </button>
                     </div>
                   )}
