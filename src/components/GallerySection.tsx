@@ -26,19 +26,22 @@ const GallerySection = () => {
   if (images.length === 0) return null;
 
   return (
-    <section className="space-y-4 animate-fade-in">
-      <h2 className="font-display text-2xl font-bold text-center gold-text">Galeria de Cortes</h2>
-      <div className="grid grid-cols-2 gap-3">
+    <div className="space-y-6 animate-fade-in">
+      <div className="text-center space-y-2">
+        <h2 className="font-display text-3xl lg:text-4xl font-bold gold-text">Galeria de Cortes</h2>
+        <p className="text-sm text-muted-foreground">Confira nossos trabalhos</p>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-4">
         {images.map((img) => (
           <button
             key={img.id}
             onClick={() => setLightbox(img.image_url)}
-            className="aspect-square rounded-xl overflow-hidden border border-border hover:ring-2 hover:ring-primary/50 transition-all"
+            className="aspect-square rounded-xl lg:rounded-2xl overflow-hidden border border-border hover:ring-2 hover:ring-primary/50 transition-all group"
           >
             <img
               src={img.image_url}
               alt={img.title || "Corte"}
-              className="w-full h-full object-cover animate-fade-in"
+              className="w-full h-full object-cover animate-fade-in group-hover:scale-110 transition-transform duration-500"
               loading="lazy"
             />
           </button>
@@ -56,7 +59,7 @@ const GallerySection = () => {
           <img src={lightbox} alt="Corte" className="max-w-full max-h-[85vh] rounded-xl object-contain" />
         </div>
       )}
-    </section>
+    </div>
   );
 };
 
