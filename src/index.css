@@ -92,3 +92,24 @@
     display: none;
   }
 }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotateY(0deg); }
+  25% { transform: translateY(-12px) rotateY(2deg); }
+  50% { transform: translateY(-6px) rotateY(0deg); }
+  75% { transform: translateY(-14px) rotateY(-2deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, hsl(43 74% 49%), hsl(43 74% 65%), hsl(43 74% 49%));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}
